@@ -35,7 +35,7 @@ def render_spx_sidebar_ticker() -> None:
   padding:10px 12px;text-align:center;margin-bottom:4px
 ">
   <div style="font-size:10px;color:#94A3B8;font-weight:600;letter-spacing:.06em">
-    S&amp;P 500 &nbsp;·&nbsp; LIVE
+    SPY &nbsp;·&nbsp; LIVE
   </div>
   <div style="font-size:24px;font-weight:800;color:#F1F5F9;line-height:1.2;margin:2px 0">
     {price:,.2f}
@@ -55,7 +55,7 @@ def render_spx_sidebar_ticker() -> None:
 # ── Main dashboard tab ─────────────────────────────────────────────────────────
 
 def render_spx_dashboard_tab() -> None:
-    st.title("📈 S&P 500 — Live Dashboard")
+    st.title("📈 SPY — Live Dashboard")
     st.caption("Prices refresh every 60 s via Yahoo Finance · Intraday data may lag ~15 min")
 
     quote = fetch_spx_quote()

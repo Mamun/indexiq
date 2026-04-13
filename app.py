@@ -41,16 +41,16 @@ with st.sidebar:
     st.markdown("---")
     active_tab = st.radio(
         "Navigation",
-        ["📈 SPX Live", "🔍 Search by Company", "📊 Weekly/Monthly Screener", "📡 Bounce Radar", "🔥 Squeeze Scanner", "💎 Strong Buy", "🔻 Strong Sell", "🎩 Munger Watchlist", "ℹ️ About"],
+        ["📈 SPY Live", "🔬 Stock Analyzer", "📊 Weekly/Monthly Screener", "📡 Bounce Radar", "🔥 Squeeze Scanner", "💎 Strong Buy", "🔻 Strong Sell", "🎩 Munger Watchlist", "ℹ️ About"],
         label_visibility="collapsed",
     )
     st.markdown("---")
     st.caption("Data sourced from Yahoo Finance · Real-time")
 
 # ── Route to view ─────────────────────────────────────────────────────────────
-if active_tab == "📈 SPX Live":
+if active_tab == "📈 SPY Live":
     render_spx_dashboard_tab()
-elif active_tab == "🔍 Search by Company":
+elif active_tab == "🔬 Stock Analyzer":
     render_search_tab()
 elif active_tab == "📊 Weekly/Monthly Screener":
     render_screener_tab()
