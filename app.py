@@ -706,7 +706,8 @@ if analyze_btn or ticker:
         st.markdown("#### Fibonacci Retracement Levels (200-session range)")
         fib_df = pd.DataFrame([
             {"Level": k, "Price": f"${v:.2f}",
-             "vs Last Close": f"{(v - price_now) / price_now * 100:+.2f}%"}
+             "vs Last Close": f"{(v - price_now) / price_now * 100:+.2f}%",
+             "Signal": "🟢 Support (Bullish)" if v < price_now else "🔴 Resistance (Bearish)"}
             for k, v in fib.items()
         ])
         st.dataframe(fib_df, use_container_width=True, hide_index=True)
@@ -720,21 +721,25 @@ if analyze_btn or ticker:
             continue
         diff_pct = (price_now - val) / val * 100
         stance = "Above" if price_now > val else "Below"
+        signal = "🟢 Bullish (Uptrend)" if price_now > val else "🔴 Bearish (Downtrend)"
         ma_rows.append({
             "MA Period": f"MA {p} (daily)",
             "Value": f"${val:.2f}",
             "Price vs MA": f"{diff_pct:+.2f}%",
             "Stance": stance,
+            "Signal": signal,
         })
     # 200-week MA row
     val_w = latest.get("MA200W", np.nan)
     if not np.isnan(val_w):
         diff_pct_w = (price_now - val_w) / val_w * 100
+        signal_w = "🟢 Bullish (Long-term Uptrend)" if price_now > val_w else "🔴 Bearish (Long-term Downtrend)"
         ma_rows.append({
             "MA Period": "MA 200 (weekly)",
             "Value": f"${val_w:.2f}",
             "Price vs MA": f"{diff_pct_w:+.2f}%",
             "Stance": "Above" if price_now > val_w else "Below",
+            "Signal": signal_w,
         })
     ma_df = pd.DataFrame(ma_rows)
     st.dataframe(ma_df, use_container_width=True, hide_index=True)
