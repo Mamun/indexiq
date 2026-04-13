@@ -23,7 +23,7 @@ st.markdown("""
     <meta property="og:description" content="Free stock technical analysis with moving averages, Fibonacci levels, reversal patterns, and AI-powered buy/sell signals." />
     <meta property="og:type" content="website" />
     <meta name="description" content="Real-time stock market analyzer with technical indicators: MA5/20/50/100/200, Fibonacci retracement, and reversal pattern detection." />
-    <meta name="keywords" content="stock analysis, technical analysis, moving averages, Fibonacci retracement, trading signals, stock market" />
+    <meta name="keywords" content="stock analysis, technical analysis, moving averages, Fibonacci retracement, trading signals,  stock market" />
     
     <script type="application/ld+json">
     {
@@ -50,6 +50,13 @@ if "search_results" not in st.session_state:
 if "ticker_val" not in st.session_state:
     st.session_state.ticker_val = "MSFT"
 
+# ── Top 30 SPX stocks ─────────────────────────────────────────────────────────
+SPX_TOP_30 = [
+    "AAPL", "MSFT", "NVDA", "TSLA", "META", "AMZN", "BRK.B", "JNJ", "V", "WMT",
+    "JPM", "MA", "PG", "XOM", "HD", "MCD", "KO", "PM", "DIS", "AXP",
+    "CSCO", "ABT", "NKE", "INTC", "MRK", "COST", "NFLX", "BA", "UTX", "IBM"
+]
+
 
 def search_companies(query: str) -> list[dict]:
     """Return matching companies from Yahoo Finance search."""
@@ -69,81 +76,167 @@ def search_companies(query: str) -> list[dict]:
         return []
 
 
-# ── Sidebar inputs ────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.header("Settings")
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def fetch_spx_recommendations() -> pd.DataFrame:
+    """
+    Fetch last 6 months of data for top 30 SPX stocks.
+    Resample to weekly and monthly, count green weeks/months.
+    """
+    recommendations = []
+    progress_placeholder = st.empty()
+    
+    for idx, ticker in enumerate(SPX_TOP_30):
+        progress_placeholder.info(f"Fetching {ticker}... ({idx + 1}/{len(SPX_TOP_30)})")
+        
+        try:
+            end_date = datetime.today()
+            start_date = end_date - timedelta(days=180)
+            df = yf.download(ticker, start=start_date.strftime("%Y-%m-%d"),
+                           end=end_date.strftime("%Y-%m-%d"), progress=False, auto_adjust=True)
+            
+            if df.empty or len(df) < 10:
+                continue
+            
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+            
+            df = df.dropna(subset=["Close"])
+            if len(df) < 10:
+                continue
+            
+            # Get company name
+            info = yf.Ticker(ticker)
+            company_name = info.info.get("longName", ticker)
+            
+            # Weekly analysis
+            weekly_df = df[["Open", "Close"]].resample("W").agg({"Open": "first", "Close": "last"})
+            weekly_last_4 = weekly_df.tail(4)
+            weekly_green = sum(1 for _, row in weekly_last_4.iterrows() if row["Close"] > row["Open"])
+            weekly_status = ["🟢" if row["Close"] > row["Open"] else "🔴" 
+                           for _, row in weekly_last_4.iterrows()]
+            
+            # Monthly analysis
+            monthly_df = df[["Open", "Close"]].resample("M").agg({"Open": "first", "Close": "last"})
+            monthly_last_4 = monthly_df.tail(4)
+            monthly_green = sum(1 for _, row in monthly_last_4.iterrows() if row["Close"] > row["Open"])
+            monthly_status = ["🟢" if row["Close"] > row["Open"] else "🔴" 
+                            for _, row in monthly_last_4.iterrows()]
+            
+            # Recommendation logic
+            if weekly_green == 4 and monthly_green >= 3:
+                signal = "🟢 BUY"
+                strength = weekly_green + monthly_green
+            else:
+                signal = "🔴 SELL"
+                strength = weekly_green + monthly_green
+            
+            last_price = df["Close"].iloc[-1]
+            
+            recommendations.append({
+                "Ticker": ticker,
+                "Company": company_name,
+                "Last Price": f"${last_price:.2f}",
+                "🔷 Weeks": " ".join(weekly_status),
+                "Green Weeks": f"{weekly_green}/4",
+                "🔶 Months": " ".join(monthly_status),
+                "Green Months": f"{monthly_green}/4",
+                "Signal": signal,
+                "Strength": strength,
+            })
+            
+        except Exception:
+            continue
+    
+    progress_placeholder.empty()
+    
+    if not recommendations:
+        return pd.DataFrame()
+    
+    return pd.DataFrame(recommendations).sort_values("Strength", ascending=False)
 
-    # ── Company search ────────────────────────────────────────────────────
-    st.markdown("**Search by company name**")
-    col_q, col_btn = st.columns([3, 1])
-    search_query = col_q.text_input(
-        "company_search", placeholder="e.g. Microsoft",
-        label_visibility="collapsed",
-    )
-    if col_btn.button("Go", use_container_width=True):
-        if search_query.strip():
-            with st.spinner("Searching…"):
-                st.session_state.search_results = search_companies(search_query.strip())
-        else:
-            st.session_state.search_results = []
 
-    if st.session_state.search_results:
-        labels = [
-            f"{r['symbol']}  —  {r['name']}  ({r['exchange']})"
-            for r in st.session_state.search_results
-        ]
-        choice_idx = st.selectbox(
-            "Select a company", range(len(labels)),
-            format_func=lambda i: labels[i],
+# ── Navigation tabs ───────────────────────────────────────────────────────────
+tab_analyzer, tab_screener = st.tabs(["📈 Stock Analyzer", "📊 Weekly/Monthly Screener"])
+
+# ── Tab 1: Stock Analyzer ─────────────────────────────────────────────────────
+with tab_analyzer:
+    # ── Feature Overview (SEO Content) ────────────────────────────────────────────
+    with st.expander("📊 About This Stock Analyzer", expanded=False):
+        st.markdown("""
+        **Stock Market Analyzer** is a free technical analysis tool designed to help traders and investors make informed decisions with real-time data.
+        
+        **Key Features:**
+        - **Moving Averages**: Track price trends with 5, 20, 50, 100, and 200-day moving averages
+        - **Fibonacci Retracement**: Identify potential support and resistance levels based on the Fibonacci sequence
+        - **Reversal Pattern Detection**: Automatic detection of 7 candlestick reversal patterns including Hammer, Morning Star, Engulfing, and Doji
+        - **Golden/Death Cross Signals**: Major trend reversal indicators based on MA50 and MA200 crossovers
+        - **Buy/Sell Signal Score**: AI-powered scoring system combining multiple technical indicators
+        - **Weekly Trend Analysis**: 200-week moving average for long-term secular trend confirmation
+        
+        **How It Works:**
+        1. Search for a company by name or enter a stock ticker symbol
+        2. Select your preferred historical period
+        3. Choose which indicators to display
+        4. Click **Analyze** to generate real-time technical analysis
+        
+        All data is sourced from Yahoo Finance and updated in real-time.
+        """)
+    
+    # ── Sidebar inputs ────────────────────────────────────────────────────────────
+    with st.sidebar:
+        st.header("Settings")
+
+        # ── Company search ────────────────────────────────────────────────────
+        st.markdown("**Search by company name**")
+        col_q, col_btn = st.columns([3, 1])
+        search_query = col_q.text_input(
+            "company_search", placeholder="e.g. Microsoft",
+            label_visibility="collapsed",
         )
-        st.session_state.ticker_val = st.session_state.search_results[choice_idx]["symbol"]
-    elif search_query and not st.session_state.search_results:
-        st.caption("No matches found — try a different name.")
+        if col_btn.button("Go", use_container_width=True):
+            if search_query.strip():
+                with st.spinner("Searching…"):
+                    st.session_state.search_results = search_companies(search_query.strip())
+            else:
+                st.session_state.search_results = []
 
-    st.markdown("---")
+        if st.session_state.search_results:
+            labels = [
+                f"{r['symbol']}  —  {r['name']}  ({r['exchange']})"
+                for r in st.session_state.search_results
+            ]
+            choice_idx = st.selectbox(
+                "Select a company", range(len(labels)),
+                format_func=lambda i: labels[i],
+            )
+            st.session_state.ticker_val = st.session_state.search_results[choice_idx]["symbol"]
+        elif search_query and not st.session_state.search_results:
+            st.caption("No matches found — try a different name.")
 
-    # ── Direct ticker entry (pre-filled from search selection) ───────────
-    ticker = st.text_input(
-        "Ticker Symbol", value=st.session_state.ticker_val, max_chars=10,
-    ).upper().strip()
+        st.markdown("---")
 
-    period_options = {
-        "1 Week":   7,
-        "2 Weeks":  14,
-        "1 Month":  30,
-        "3 Months": 90,
-        "6 Months": 180,
-        "1 Year":   365,
-        "2 Years":  730,
-        "5 Years":  1825,
-    }
-    period_label = st.selectbox("Historical Period", list(period_options.keys()), index=2)
-    period_days = period_options[period_label]
-    show_volume = st.checkbox("Show Volume", value=True)
-    show_fibonacci = st.checkbox("Show Fibonacci Levels", value=True)
-    show_patterns = st.checkbox("Show Reversal Patterns", value=True)
-    analyze_btn = st.button("Analyze", use_container_width=True, type="primary")
-# ── Feature Overview (SEO Content) ────────────────────────────────────────────
-with st.expander("📊 About This Stock Analyzer", expanded=False):
-    st.markdown("""
-    **Stock Market Analyzer** is a free technical analysis tool designed to help traders and investors make informed decisions with real-time data.
-    
-    **Key Features:**
-    - **Moving Averages**: Track price trends with 5, 20, 50, 100, and 200-day moving averages
-    - **Fibonacci Retracement**: Identify potential support and resistance levels based on the Fibonacci sequence
-    - **Reversal Pattern Detection**: Automatic detection of 7 candlestick reversal patterns including Hammer, Morning Star, Engulfing, and Doji
-    - **Golden/Death Cross Signals**: Major trend reversal indicators based on MA50 and MA200 crossovers
-    - **Buy/Sell Signal Score**: AI-powered scoring system combining multiple technical indicators
-    - **Weekly Trend Analysis**: 200-week moving average for long-term secular trend confirmation
-    
-    **How It Works:**
-    1. Search for a company by name or enter a stock ticker symbol
-    2. Select your preferred historical period
-    3. Choose which indicators to display
-    4. Click **Analyze** to generate real-time technical analysis
-    
-    All data is sourced from Yahoo Finance and updated in real-time.
-    """)
+        # ── Direct ticker entry (pre-filled from search selection) ───────────
+        ticker = st.text_input(
+            "Ticker Symbol", value=st.session_state.ticker_val, max_chars=10,
+        ).upper().strip()
+
+        period_options = {
+            "1 Week":   7,
+            "2 Weeks":  14,
+            "1 Month":  30,
+            "3 Months": 90,
+            "6 Months": 180,
+            "1 Year":   365,
+            "2 Years":  730,
+            "5 Years":  1825,
+        }
+        period_label = st.selectbox("Historical Period", list(period_options.keys()), index=2)
+        period_days = period_options[period_label]
+        show_volume = st.checkbox("Show Volume", value=True)
+        show_fibonacci = st.checkbox("Show Fibonacci Levels", value=True)
+        show_patterns = st.checkbox("Show Reversal Patterns", value=True)
+        analyze_btn = st.button("Analyze", use_container_width=True, type="primary")
+
 # ── Signal engine ─────────────────────────────────────────────────────────────
 
 # ── Reversal pattern registry ─────────────────────────────────────────────────
@@ -745,4 +838,35 @@ if analyze_btn or ticker:
     st.dataframe(ma_df, use_container_width=True, hide_index=True)
 
 else:
-    st.info("Enter a ticker in the sidebar and click **Analyze**.")
+    with tab_analyzer:
+        st.info("Enter a ticker in the sidebar and click **Analyze**.")
+
+# ── Tab 2: Weekly/Monthly Screener ────────────────────────────────────────────
+with tab_screener:
+    st.markdown("#### SPX Top 30 Weekly/Monthly Recommendations")
+    st.markdown("🟢 **Green** = Close > Open | 🔴 **Red** = Close < Open")
+    st.markdown("**Signal**: BUY if all 4 weeks are green AND at least 3 months green, otherwise SELL")
+    
+    st.markdown("---")
+    
+    if st.button("🔄 Generate Recommendations", use_container_width=True, type="primary"):
+        with st.spinner("📊 Analyzing top 30 SPX stocks..."):
+            recs_df = fetch_spx_recommendations()
+        
+        if not recs_df.empty:
+            st.success(f"✅ Analyzed {len(recs_df)} stocks")
+            
+            buy_df = recs_df[recs_df["Signal"] == "🟢 BUY"]
+            sell_df = recs_df[recs_df["Signal"] == "🔴 SELL"]
+            
+            if not buy_df.empty:
+                st.markdown("### 🟢 BUY Recommendations")
+                display_cols = ["Ticker", "Company", "Last Price", "🔷 Weeks", "Green Weeks", "🔶 Months", "Green Months", "Signal"]
+                st.dataframe(buy_df[display_cols], use_container_width=True, hide_index=True)
+            
+            if not sell_df.empty:
+                st.markdown("### 🔴 SELL / HOLD")
+                display_cols = ["Ticker", "Company", "Last Price", "🔷 Weeks", "Green Weeks", "🔶 Months", "Green Months", "Signal"]
+                st.dataframe(sell_df[display_cols], use_container_width=True, hide_index=True)
+        else:
+            st.warning("Could not fetch recommendation data. Please try again.")
