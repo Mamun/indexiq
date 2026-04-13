@@ -382,6 +382,19 @@ def find_crosses(df: pd.DataFrame) -> tuple[pd.DatetimeIndex, pd.DatetimeIndex]:
     return golden, death
 
 
+def compute_daily_gaps(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate daily gaps (current open - previous close)."""
+    df_gap = df[["Open", "Close"]].copy()
+    df_gap["Prev Close"] = df_gap["Close"].shift(1)
+    df_gap["Gap"] = df_gap["Open"] - df_gap["Prev Close"]
+    df_gap["Gap %"] = (df_gap["Gap"] / df_gap["Prev Close"] * 100).round(2)
+    df_gap["Open"] = df_gap["Open"].round(2)
+    df_gap["Close"] = df_gap["Close"].round(2)
+    df_gap["Prev Close"] = df_gap["Prev Close"].round(2)
+    df_gap["Gap"] = df_gap["Gap"].round(2)
+    return df_gap.dropna()
+
+
 def build_chart(df: pd.DataFrame, fib_levels: dict, ticker: str, show_vol: bool, show_fib: bool, show_patterns: bool) -> go.Figure:
     rows = 2 if show_vol else 1
     row_heights = [0.7, 0.3] if show_vol else [1.0]
@@ -609,9 +622,22 @@ if analyze_btn or ticker:
             icon = "✅" if "bullish" in r.lower() or "above" in r.lower() or "golden" in r.lower() else "🔴"
             st.markdown(f"- {icon} {r}")
 
-    # ── Chart ─────────────────────────────────────────────────────────────
-    fig = build_chart(display_df, fib, ticker, show_volume, show_fibonacci, show_patterns)
-    st.plotly_chart(fig, use_container_width=True)
+    # ── Chart & Gap Table ─────────────────────────────────────────────────
+    chart_col, gap_col = st.columns([2, 1])
+    
+    with chart_col:
+        fig = build_chart(display_df, fib, ticker, show_volume, show_fibonacci, show_patterns)
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with gap_col:
+        st.markdown("#### Daily Gaps (Last 30 Days)")
+        gaps_df = compute_daily_gaps(display_df)
+        gaps_last_30 = gaps_df.tail(30).copy()
+        gaps_last_30 = gaps_last_30[["Open", "Prev Close", "Gap", "Gap %"]].reset_index()
+        gaps_last_30.columns = ["Date", "Open", "Prev Close", "Gap $", "Gap %"]
+        gaps_last_30["Date"] = gaps_last_30["Date"].dt.strftime("%m-%d")
+        gaps_display = gaps_last_30.sort_values("Date", ascending=False)
+        st.dataframe(gaps_display, use_container_width=True, hide_index=True, height=600)
 
     if show_patterns:
         pattern_rows = []
