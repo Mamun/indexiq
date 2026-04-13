@@ -8,13 +8,41 @@ from datetime import datetime, timedelta
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Stock Market Analyzer",
+    page_title="Stock Market Analyzer - Technical Analysis & Trading Signals",
     page_icon="📈",
     layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        "About": "Stock Market Analyzer: Real-time technical analysis with moving averages, Fibonacci retracement, and reversal pattern detection for informed trading decisions."
+    }
 )
 
+# ── SEO: Open Graph & Schema Markup ───────────────────────────────────────────
+st.markdown("""
+    <meta property="og:title" content="Stock Market Analyzer - Technical Analysis Tool" />
+    <meta property="og:description" content="Free stock technical analysis with moving averages, Fibonacci levels, reversal patterns, and AI-powered buy/sell signals." />
+    <meta property="og:type" content="website" />
+    <meta name="description" content="Real-time stock market analyzer with technical indicators: MA5/20/50/100/200, Fibonacci retracement, and reversal pattern detection." />
+    <meta name="keywords" content="stock analysis, technical analysis, moving averages, Fibonacci retracement, trading signals, stock market" />
+    
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org/",
+        "@type": "WebApplication",
+        "name": "Stock Market Analyzer",
+        "description": "Technical analysis tool providing real-time stock market insights with moving averages, Fibonacci levels, and reversal pattern detection",
+        "applicationCategory": "FinanceApplication",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        }
+    }
+    </script>
+""", unsafe_allow_html=True)
+
 st.title("📈 Stock Market Analyzer")
-st.markdown("Moving Averages · Fibonacci Levels · Buy / Sell Signals")
+st.markdown("Moving Averages · Fibonacci Levels · Buy / Sell Signals · Reversal Patterns")
 
 # ── Session state ─────────────────────────────────────────────────────────────
 if "search_results" not in st.session_state:
@@ -95,7 +123,27 @@ with st.sidebar:
     show_fibonacci = st.checkbox("Show Fibonacci Levels", value=True)
     show_patterns = st.checkbox("Show Reversal Patterns", value=True)
     analyze_btn = st.button("Analyze", use_container_width=True, type="primary")
-
+# ── Feature Overview (SEO Content) ────────────────────────────────────────────
+with st.expander("📊 About This Stock Analyzer", expanded=False):
+    st.markdown("""
+    **Stock Market Analyzer** is a free technical analysis tool designed to help traders and investors make informed decisions with real-time data.
+    
+    **Key Features:**
+    - **Moving Averages**: Track price trends with 5, 20, 50, 100, and 200-day moving averages
+    - **Fibonacci Retracement**: Identify potential support and resistance levels based on the Fibonacci sequence
+    - **Reversal Pattern Detection**: Automatic detection of 7 candlestick reversal patterns including Hammer, Morning Star, Engulfing, and Doji
+    - **Golden/Death Cross Signals**: Major trend reversal indicators based on MA50 and MA200 crossovers
+    - **Buy/Sell Signal Score**: AI-powered scoring system combining multiple technical indicators
+    - **Weekly Trend Analysis**: 200-week moving average for long-term secular trend confirmation
+    
+    **How It Works:**
+    1. Search for a company by name or enter a stock ticker symbol
+    2. Select your preferred historical period
+    3. Choose which indicators to display
+    4. Click **Analyze** to generate real-time technical analysis
+    
+    All data is sourced from Yahoo Finance and updated in real-time.
+    """)
 # ── Signal engine ─────────────────────────────────────────────────────────────
 
 # ── Reversal pattern registry ─────────────────────────────────────────────────
