@@ -383,16 +383,38 @@ def find_crosses(df: pd.DataFrame) -> tuple[pd.DatetimeIndex, pd.DatetimeIndex]:
 
 
 def compute_daily_gaps(df: pd.DataFrame) -> pd.DataFrame:
-    """Calculate daily gaps (current open - previous close)."""
-    df_gap = df[["Open", "Close"]].copy()
+    """Calculate daily gaps (current open - previous close) and track if filled."""
+    df_gap = df[["Open", "Close", "High", "Low"]].copy()
     df_gap["Prev Close"] = df_gap["Close"].shift(1)
     df_gap["Gap"] = df_gap["Open"] - df_gap["Prev Close"]
     df_gap["Gap %"] = (df_gap["Gap"] / df_gap["Prev Close"] * 100).round(2)
+    
+    # Check if gap is filled within 3 trading days
+    df_gap["Gap Filled"] = False
+    for i in range(len(df_gap)):
+        if pd.isna(df_gap.iloc[i]["Gap"]) or df_gap.iloc[i]["Gap"] == 0:
+            continue
+        prev_close = df_gap.iloc[i]["Prev Close"]
+        gap_direction = 1 if df_gap.iloc[i]["Gap"] > 0 else -1  # 1 for up gap, -1 for down gap
+        
+        # Check next 3 trading days
+        for j in range(i + 1, min(i + 4, len(df_gap))):
+            high = df_gap.iloc[j]["High"]
+            low = df_gap.iloc[j]["Low"]
+            # Gap is filled if price touches previous close within 3 days
+            if gap_direction > 0 and low <= prev_close:  # Up gap filled
+                df_gap.iloc[i, df_gap.columns.get_loc("Gap Filled")] = True
+                break
+            elif gap_direction < 0 and high >= prev_close:  # Down gap filled
+                df_gap.iloc[i, df_gap.columns.get_loc("Gap Filled")] = True
+                break
+    
     df_gap["Open"] = df_gap["Open"].round(2)
     df_gap["Close"] = df_gap["Close"].round(2)
     df_gap["Prev Close"] = df_gap["Prev Close"].round(2)
     df_gap["Gap"] = df_gap["Gap"].round(2)
-    return df_gap.dropna()
+    return df_gap.dropna(subset=["Prev Close"])
+
 
 
 def build_chart(df: pd.DataFrame, fib_levels: dict, ticker: str, show_vol: bool, show_fib: bool, show_patterns: bool) -> go.Figure:
@@ -633,11 +655,28 @@ if analyze_btn or ticker:
         st.markdown("#### Daily Gaps (Last 30 Days)")
         gaps_df = compute_daily_gaps(display_df)
         gaps_last_30 = gaps_df.tail(30).copy()
-        gaps_last_30 = gaps_last_30[["Open", "Prev Close", "Gap", "Gap %"]].reset_index()
-        gaps_last_30.columns = ["Date", "Open", "Prev Close", "Gap $", "Gap %"]
-        gaps_last_30["Date"] = gaps_last_30["Date"].dt.strftime("%m-%d")
-        gaps_display = gaps_last_30.sort_values("Date", ascending=False)
-        st.dataframe(gaps_display, use_container_width=True, hide_index=True, height=600)
+        
+        # Extract display columns and track unfilled status
+        gaps_display_data = gaps_last_30[["Open", "Prev Close", "Gap", "Gap %", "Gap Filled"]].reset_index()
+        gaps_display_data.columns = ["Date", "Open", "Prev Close", "Gap $", "Gap %", "Unfilled"]
+        gaps_display_data["Date"] = gaps_display_data["Date"].dt.strftime("%m-%d")
+        gaps_display_data = gaps_display_data.sort_values("Date", ascending=False)
+        
+        # Style with conditional formatting
+        def style_gap_row(row):
+            if row["Unfilled"] is False:  # Gap filled (normal color)
+                return [""] * len(row)
+            else:  # Gap not filled (highlight in red)
+                return ["background-color: rgba(239, 68, 68, 0.2); color: #EF4444; font-weight: bold"] * len(row)
+        
+        # Display without the Unfilled column but with styling
+        gaps_for_display = gaps_display_data.drop("Unfilled", axis=1)
+        styled_df = gaps_for_display.style.apply(
+            lambda row: ["background-color: rgba(239, 68, 68, 0.2); color: #EF4444; font-weight: bold"] * len(row) 
+                        if gaps_display_data.loc[row.name, "Unfilled"] is False else [""] * len(row),
+            axis=1
+        )
+        st.dataframe(gaps_for_display, use_container_width=True, hide_index=True, height=600)
 
     if show_patterns:
         pattern_rows = []
