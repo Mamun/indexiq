@@ -1,15 +1,6 @@
 import streamlit as st
 
 from seo import inject_seo
-from views.about import render_about_tab
-from views.bounce_radar import render_bounce_radar_tab
-from views.screener import render_screener_tab
-from views.search import render_search_tab
-from views.munger_strategy import render_munger_tab
-from views.spx_dashboard import render_spx_dashboard_tab
-from views.squeeze_scanner import render_squeeze_scanner_tab
-from views.strong_buy import render_strong_buy_tab
-from views.strong_sell import render_strong_sell_tab
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -26,41 +17,31 @@ st.set_page_config(
 # ── SEO metadata ──────────────────────────────────────────────────────────────
 inject_seo()
 
-# ── Session state ─────────────────────────────────────────────────────────────
-if "search_results" not in st.session_state:
-    st.session_state.search_results = []
-if "ticker_val" not in st.session_state:
-    st.session_state.ticker_val = "MSFT"
+# ── Navigation ────────────────────────────────────────────────────────────────
+pages = [
+    st.Page("views/spy_dashboard.py",   title="SPY Live",               icon="📈", url_path="spy",          default=True),
+    st.Page("views/spy_gap_table.py",   title="SPY Gap Table",          icon="📋", url_path="spy-gaps"),
+    st.Page("views/analyzer.py",        title="Stock Analyzer",         icon="🔬", url_path="analyzer"),
+    st.Page("views/screener.py",        title="Weekly/Monthly Screener",icon="📊", url_path="screener"),
+    st.Page("views/bounce_radar.py",    title="Bounce Radar",           icon="📡", url_path="bounce-radar"),
+    st.Page("views/squeeze_scanner.py", title="Squeeze Scanner",        icon="🔥", url_path="squeeze"),
+    st.Page("views/strong_buy.py",      title="Strong Buy",             icon="💎", url_path="strong-buy"),
+    st.Page("views/strong_sell.py",     title="Strong Sell",            icon="🔻", url_path="strong-sell"),
+    st.Page("views/munger_strategy.py", title="Munger Watchlist",       icon="🎩", url_path="munger"),
+    st.Page("views/about.py",           title="About",                  icon="ℹ️",  url_path="about"),
+]
 
-# ── Sidebar navigation ────────────────────────────────────────────────────────
+pg = st.navigation(pages)
+
+# Hide utility pages (shareable embeds) from the sidebar nav
+st.markdown("""
+<style>
+[data-testid="stSidebarNav"] a[href$="/spy-gaps"],
+[data-testid="stSidebarNavLink"] a[href$="/spy-gaps"] { display: none !important; }
+</style>
+""", unsafe_allow_html=True)
+
 with st.sidebar:
-    st.markdown("## 📈 IndexIQ")
-    st.caption("Technical Analysis Tool")
-    st.markdown("---")
-    active_tab = st.radio(
-        "Navigation",
-        ["📈 SPY Live", "🔬 Stock Analyzer", "📊 Weekly/Monthly Screener", "📡 Bounce Radar", "🔥 Squeeze Scanner", "💎 Strong Buy", "🔻 Strong Sell", "🎩 Munger Watchlist", "ℹ️ About"],
-        label_visibility="collapsed",
-    )
-    st.markdown("---")
     st.caption("Data sourced from Yahoo Finance · Real-time")
 
-# ── Route to view ─────────────────────────────────────────────────────────────
-if active_tab == "📈 SPY Live":
-    render_spx_dashboard_tab()
-elif active_tab == "🔬 Stock Analyzer":
-    render_search_tab()
-elif active_tab == "📊 Weekly/Monthly Screener":
-    render_screener_tab()
-elif active_tab == "📡 Bounce Radar":
-    render_bounce_radar_tab()
-elif active_tab == "🔥 Squeeze Scanner":
-    render_squeeze_scanner_tab()
-elif active_tab == "💎 Strong Buy":
-    render_strong_buy_tab()
-elif active_tab == "🔻 Strong Sell":
-    render_strong_sell_tab()
-elif active_tab == "🎩 Munger Watchlist":
-    render_munger_tab()
-elif active_tab == "ℹ️ About":
-    render_about_tab()
+pg.run()

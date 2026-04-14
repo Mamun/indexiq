@@ -43,3 +43,7 @@ def render_about_tab() -> None:
         {"Pattern": "Evening Star",      "Type": "Bearish", "Description": "3-candle pattern: bullish → indecision → bearish — reversal from uptrend"},
         {"Pattern": "Doji",              "Type": "Neutral", "Description": "Open ≈ Close — market indecision, potential trend change"},
     ]), width='stretch', hide_index=True)
+
+
+render_about_tab()
+

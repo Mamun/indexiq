@@ -66,7 +66,14 @@ def compute_daily_gaps(df: pd.DataFrame) -> pd.DataFrame:
 
         gap_filled_list.append(is_filled)
 
-    df_gap["Gap Filled"] = gap_filled_list
+    n = len(df_gap)
+    df_gap["Gap Filled"]    = gap_filled_list
+    # A gap is "confirmed" (fill status is known) only when 3+ future bars have been seen
+    # OR the gap was already filled.  The last 3 bars lack enough future data to confirm.
+    df_gap["Gap Confirmed"] = [
+        gap_filled_list[i] or (i < n - 3)
+        for i in range(n)
+    ]
     df_gap["Open"]       = df_gap["Open"].round(2)
     df_gap["Close"]      = df_gap["Close"].round(2)
     df_gap["Prev Close"] = df_gap["Prev Close"].round(2)

@@ -13,29 +13,45 @@ def render_squeeze_scanner_tab() -> None:
         "High Squeeze Score = stronger pressure on shorts."
     )
 
+    # ── URL params ────────────────────────────────────────────────────────────
+    params    = st.query_params
+    auto_scan = params.get("scan", "0") == "1"
+    try:    _url_rsi   = max(45,  min(85,  int(params.get("rsi",   55))))
+    except: _url_rsi   = 55
+    try:    _url_short = max(0.1, min(5.0, round(float(params.get("short", 0.5)), 1)))
+    except: _url_short = 0.5
+    try:    _url_top   = max(10,  min(50,  int(params.get("top",   30))))
+    except: _url_top   = 30
+
     # ── Controls ──────────────────────────────────────────────────────────────
     c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
     rsi_min = c1.slider(
         "Min RSI",
-        min_value=45, max_value=85, value=55, step=5,
+        min_value=45, max_value=85, value=_url_rsi, step=5,
         help="Only include stocks with RSI at or above this level",
     )
     min_short_float = c2.slider(
         "Min Short % of Float",
-        min_value=0.1, max_value=5.0, value=0.5, step=0.1,
+        min_value=0.1, max_value=5.0, value=_url_short, step=0.1,
         help="S&P 500 large-caps typically range 0.5–3%. Even 2%+ is elevated for this universe.",
     )
     top_n = c3.slider(
         "Max results",
-        min_value=10, max_value=50, value=30, step=5,
+        min_value=10, max_value=50, value=_url_top, step=5,
     )
     scan_btn = c4.button("🔍 Scan", width='stretch', type="primary")
 
     st.markdown("---")
 
-    if not scan_btn:
+    if not scan_btn and not auto_scan:
         _render_legend()
         return
+
+    # Sync current filter state into URL so the page is shareable
+    st.query_params["rsi"]   = str(rsi_min)
+    st.query_params["short"] = str(min_short_float)
+    st.query_params["top"]   = str(top_n)
+    st.query_params["scan"]  = "1"
 
     with st.spinner("🔥 Scanning for squeeze setups…"):
         df = fetch_squeeze_candidates(
@@ -234,3 +250,6 @@ def _render_legend() -> None:
         | Squeeze Score | > 25 noteworthy · > 45 strong setup |
         """)
     st.markdown("Adjust thresholds and click **Scan** to start.")
+
+
+render_squeeze_scanner_tab()

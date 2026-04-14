@@ -13,35 +13,56 @@ def render_strong_buy_tab() -> None:
         "RSI entry check ensures you're not chasing an already-overbought name."
     )
 
+    # ── URL params ────────────────────────────────────────────────────────────
+    params    = st.query_params
+    auto_scan = params.get("scan", "0") == "1"
+    try:    _url_upside   = max(0,   min(40, int(params.get("upside",   5))))
+    except: _url_upside   = 5
+    try:    _url_analysts = max(1,   min(20, int(params.get("analysts", 5))))
+    except: _url_analysts = 5
+    try:
+        _r = float(params.get("rating", 2.5))
+        _url_rating = _r if _r in (1.5, 2.0, 2.5) else 2.5
+    except: _url_rating = 2.5
+    try:    _url_top      = max(5,   min(30, int(params.get("top",      20))))
+    except: _url_top      = 20
+
     # ── Controls ──────────────────────────────────────────────────────────────
     c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 1])
     min_upside = c1.slider(
         "Min Upside %",
-        min_value=0, max_value=40, value=5, step=5,
+        min_value=0, max_value=40, value=_url_upside, step=5,
         help="Analyst mean price target must be at least this % above current price",
     )
     min_analysts = c2.slider(
         "Min # of Analysts",
-        min_value=1, max_value=20, value=5, step=1,
+        min_value=1, max_value=20, value=_url_analysts, step=1,
         help="Require at least this many analysts to avoid thin coverage",
     )
     max_rating = c3.select_slider(
         "Max Rating (consensus)",
         options=[1.5, 2.0, 2.5],
-        value=2.5,
+        value=_url_rating,
         format_func=lambda v: {1.5: "Strong Buy only", 2.0: "Buy & above", 2.5: "Moderate Buy & above"}[v],
     )
     top_n = c4.slider(
         "Max results",
-        min_value=5, max_value=30, value=20, step=5,
+        min_value=5, max_value=30, value=_url_top, step=5,
     )
     scan_btn = c5.button("🔍 Scan", use_container_width=True, type="primary")
 
     st.markdown("---")
 
-    if not scan_btn:
+    if not scan_btn and not auto_scan:
         _render_legend()
         return
+
+    # Sync current filter state into URL so the page is shareable
+    st.query_params["upside"]   = str(min_upside)
+    st.query_params["analysts"] = str(min_analysts)
+    st.query_params["rating"]   = str(max_rating)
+    st.query_params["top"]      = str(top_n)
+    st.query_params["scan"]     = "1"
 
     with st.spinner("💎 Fetching analyst consensus data…"):
         df = fetch_strong_buy_candidates(
@@ -304,3 +325,7 @@ def _render_legend() -> None:
         | SB Score ≥ 75 | 🟡 Exceptional conviction setup |
         """)
     st.markdown("Adjust filters and click **Scan** to find candidates.")
+
+
+render_strong_buy_tab()
+

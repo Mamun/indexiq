@@ -145,3 +145,7 @@ def _render_legend() -> None:
     st.markdown("| 🟢 ≤ 30 | Oversold — potential bounce |")
     st.markdown("| ⚪ 30–70 | Neutral |")
     st.markdown("| 🔴 ≥ 70 | Overbought — bounce less likely |")
+
+
+render_bounce_radar_tab()
+

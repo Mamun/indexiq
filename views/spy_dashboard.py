@@ -1,16 +1,15 @@
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
 from data import fetch_index_snapshot, fetch_spx_intraday, fetch_spx_quote, fetch_vix_history, fetch_vix_ohlc
-from indicators import compute_daily_gaps
+from indicators import compute_daily_gaps, compute_rsi
 
 
 # ── Main dashboard tab ─────────────────────────────────────────────────────────
 
-def render_spx_dashboard_tab() -> None:
+def render_spy_dashboard_tab() -> None:
     st.title("📈 SPY — Live Dashboard")
     st.caption("Prices refresh every 60 s via Yahoo Finance · Intraday data may lag ~15 min")
 
@@ -46,7 +45,11 @@ def render_spx_dashboard_tab() -> None:
         "6M":     ("6mo", "1d",  [20, 50, 200], False),
         "1Y":     ("1y",  "1d",  [20, 50, 200], False),
     }
-    choice = st.radio("Period", list(period_map), horizontal=True, key="spy_period", index=5)
+    period_col, rsi_col = st.columns([6, 1])
+    with period_col:
+        choice = st.radio("Period", list(period_map), horizontal=True, key="spy_period", index=5)
+    show_rsi = rsi_col.checkbox("RSI", value=True)
+
     yf_period, interval, mas, show_prev = period_map[choice]
 
     chart_df = fetch_spx_intraday(period=yf_period, interval=interval)
@@ -54,7 +57,7 @@ def render_spx_dashboard_tab() -> None:
         st.info("Chart data unavailable — the market may be closed or data is delayed.")
     else:
         prev = quote["prev_close"] if show_prev else None
-        st.plotly_chart(_spy_chart(chart_df, mas, prev), width="stretch")
+        st.plotly_chart(_spy_chart(chart_df, mas, prev, show_rsi=show_rsi), width="stretch")
 
     st.markdown("---")
 
@@ -195,12 +198,15 @@ def _render_vix_gap_table() -> None:
         st.info("VIX OHLC data unavailable.")
         return
     gaps_df = compute_daily_gaps(vix_ohlc)
-    gaps_data = gaps_df.tail(30)[["Open", "Prev Close", "Gap", "Gap %", "Gap Filled"]].reset_index()
-    gaps_data.columns = ["Date", "Open", "Prev Close", "Gap $", "Gap %", "Filled"]
+    gaps_data = gaps_df.tail(30)[["Open", "Prev Close", "Gap", "Gap %", "Gap Filled", "Gap Confirmed"]].reset_index()
+    gaps_data.columns = ["Date", "Open", "Prev Close", "Gap $", "Gap %", "Filled", "Gap Confirmed"]
     gaps_data["Date"] = gaps_data["Date"].dt.strftime("%m-%d")
     gaps_data = gaps_data.sort_values("Date", ascending=False).reset_index(drop=True)
     gaps_data["Status"] = gaps_data.apply(
-        lambda r: "—" if r["Gap $"] == 0 else ("✅ Filled" if r["Filled"] else "❌ Open"),
+        lambda r: "—" if r["Gap $"] == 0
+        else ("✅ Filled" if r["Filled"]
+        else ("⏳ Pending" if not r.get("Gap Confirmed", True)
+        else "❌ Open")),
         axis=1,
     )
     display = gaps_data[["Date", "Open", "Prev Close", "Gap $", "Gap %", "Status"]]
@@ -226,7 +232,35 @@ def _render_vix_gap_table() -> None:
 
 
 def _render_spy_gap_table(daily_df) -> None:
-    st.markdown("#### Daily Gaps (Last 30 Days)")
+    head_col, btn_col = st.columns([8, 1])
+    head_col.markdown("#### Daily Gaps (Last 30 Days)")
+    with btn_col:
+        import streamlit.components.v1 as components
+        components.html("""
+        <button onclick="
+          var url = (window.parent.location.origin || window.location.ancestorOrigins?.[0] || window.location.origin) + '/spy-gaps';
+          navigator.clipboard.writeText(url)
+            .then(function() {
+              var b = document.getElementById('sb');
+              b.innerHTML = '✅ Copied!';
+              b.style.color = '#22C55E';
+              b.style.borderColor = '#22C55E';
+              setTimeout(function() {
+                b.innerHTML = '🔗 Share';
+                b.style.color = '#94A3B8';
+                b.style.borderColor = '#334155';
+              }, 2000);
+            })
+            .catch(function() {
+              var b = document.getElementById('sb');
+              b.innerHTML = window.location.origin + '/spy-gaps';
+            });
+        " id="sb" style="
+          background:#0F172A;color:#94A3B8;border:1px solid #334155;
+          border-radius:6px;padding:5px 10px;cursor:pointer;
+          font-size:13px;white-space:nowrap;width:100%;
+        ">🔗 Share</button>
+        """, height=38)
     gaps_df = compute_daily_gaps(daily_df)
 
     # Next-day price direction: shift Close up by 1 so each row shows tomorrow's close
@@ -239,22 +273,40 @@ def _render_spy_gap_table(daily_df) -> None:
         axis=1,
     )
 
-    base_cols = ["Open", "Prev Close", "Gap", "Gap %", "Gap Filled", "Next Day"]
+    # Attach RSI — deduplicate index first to prevent row expansion on duplicate dates
+    rsi_dedup = compute_rsi(daily_df)[~daily_df.index.duplicated(keep="last")]
+    gaps_df["RSI"] = rsi_dedup.reindex(gaps_df.index)
+
     has_vol = "Volume" in gaps_df.columns
+    base_cols = ["Open", "Prev Close", "Gap", "Gap %", "Gap Filled", "Gap Confirmed", "RSI", "Next Day"]
     if has_vol:
         base_cols.insert(2, "Volume")
     gaps_data = gaps_df.tail(30)[base_cols].reset_index()
     if has_vol:
-        gaps_data.columns = ["Date", "Open", "Prev Close", "Volume", "Gap $", "Gap %", "Filled", "Next Day"]
+        gaps_data.columns = ["Date", "Open", "Prev Close", "Volume", "Gap $", "Gap %", "Filled", "Gap Confirmed", "RSI", "Next Day"]
     else:
-        gaps_data.columns = ["Date", "Open", "Prev Close", "Gap $", "Gap %", "Filled", "Next Day"]
+        gaps_data.columns = ["Date", "Open", "Prev Close", "Gap $", "Gap %", "Filled", "Gap Confirmed", "RSI", "Next Day"]
     gaps_data["Date"] = gaps_data["Date"].dt.strftime("%m-%d")
     gaps_data = gaps_data.sort_values("Date", ascending=False).reset_index(drop=True)
+
     gaps_data["Status"] = gaps_data.apply(
-        lambda r: "—" if r["Gap $"] == 0 else ("✅ Filled" if r["Filled"] else "❌ Open"),
+        lambda r: "—" if r["Gap $"] == 0
+        else ("✅ Filled" if r["Filled"]
+        else ("⏳ Pending" if not r.get("Gap Confirmed", True)
+        else "❌ Open")),
         axis=1,
     )
-    display_cols = ["Date", "Open", "Prev Close"] + (["Volume"] if has_vol else []) + ["Gap $", "Gap %", "Status", "Next Day"]
+
+    gaps_data["RSI Zone"] = gaps_data["RSI"].apply(
+        lambda v: "—" if pd.isna(v) or v == 0
+        else ("Overbought" if v >= 70 else ("Oversold" if v <= 30 else "Neutral"))
+    )
+
+    display_cols = (
+        ["Date", "Open", "Prev Close"]
+        + (["Volume"] if has_vol else [])
+        + ["Gap $", "Gap %", "Status", "RSI", "RSI Zone", "Next Day"]
+    )
     display = gaps_data[display_cols]
 
     def _color_next_day(val):
@@ -269,19 +321,40 @@ def _render_spy_gap_table(daily_df) -> None:
         filled = gaps_data.loc[row.name, "Filled"]
         if gap == 0 or bool(filled):
             return [""] * len(row)
-        if gap > 0:
-            style = "background-color: rgba(34,197,94,0.20); color:#22C55E; font-weight:600"
-        else:
-            style = "background-color: rgba(239,68,68,0.25); color:#EF4444; font-weight:600"
+        style = (
+            "background-color: rgba(34,197,94,0.20); color:#22C55E; font-weight:600"
+            if gap > 0
+            else "background-color: rgba(239,68,68,0.25); color:#EF4444; font-weight:600"
+        )
         return [style] * len(row)
 
-    fmt = {"Open": "${:.2f}", "Prev Close": "${:.2f}", "Gap $": "${:.2f}", "Gap %": "{:+.2f}%"}
+    def _color_rsi_zone(val):
+        if val == "Overbought":
+            return "color:#EF4444; font-weight:700"
+        if val == "Oversold":
+            return "color:#22C55E; font-weight:700"
+        if val == "Neutral":
+            return "color:#F59E0B"
+        return ""
+
+    def _color_rsi(val):
+        if pd.isna(val) or val == 0:
+            return ""
+        if val >= 70:
+            return "color:#EF4444; font-weight:700"
+        if val <= 30:
+            return "color:#22C55E; font-weight:700"
+        return "color:#F59E0B"
+
+    fmt = {"Open": "${:.2f}", "Prev Close": "${:.2f}", "Gap $": "${:.2f}", "Gap %": "{:+.2f}%", "RSI": "{:.1f}"}
     if has_vol:
         fmt["Volume"] = lambda x: f"{x/1_000_000:.1f}M" if x and x > 0 else "—"
     st.dataframe(
         display.style
             .apply(_highlight, axis=1)
             .map(_color_next_day, subset=["Next Day"])
+            .map(_color_rsi_zone, subset=["RSI Zone"])
+            .map(_color_rsi, subset=["RSI"])
             .format(fmt, na_rep="—"),
         width="stretch", hide_index=True, height=600,
     )
@@ -292,11 +365,7 @@ def _render_spy_summary(quote, price, chg, chg_pct, daily_df) -> None:
     # ── Compute technicals ────────────────────────────────────────────────────
     rsi_val = ma5 = ma50 = ma100 = ma200 = cross_label = cross_clr = None
     if not daily_df.empty:
-        delta    = daily_df["Close"].diff()
-        avg_gain = delta.clip(lower=0).ewm(com=13, min_periods=14).mean()
-        avg_loss = (-delta.clip(upper=0)).ewm(com=13, min_periods=14).mean()
-        rs       = avg_gain / avg_loss.replace(0, np.nan)
-        rsi_val  = float((100 - 100 / (1 + rs)).iloc[-1])
+        rsi_val = float(compute_rsi(daily_df).iloc[-1])
 
         def _ma(p):
             return float(daily_df["Close"].rolling(p).mean().iloc[-1]) if len(daily_df) >= p else None
@@ -406,12 +475,19 @@ def _render_index_strip(df) -> None:
         )
 
 
-def _spy_chart(df, ma_periods: list, prev_close: float | None = None) -> go.Figure:
-    """Unified candlestick + volume chart for any period/interval."""
+def _spy_chart(df, ma_periods: list, prev_close: float | None = None, show_rsi: bool = False) -> go.Figure:
+    """Candlestick + volume + optional RSI chart for any period/interval."""
+    if show_rsi:
+        rows, row_heights = 3, [0.55, 0.2, 0.25]
+        vol_row, rsi_row  = 2, 3
+    else:
+        rows, row_heights = 2, [0.75, 0.25]
+        vol_row, rsi_row  = 2, None
+
     fig = make_subplots(
-        rows=2, cols=1,
+        rows=rows, cols=1,
         shared_xaxes=True,
-        row_heights=[0.75, 0.25],
+        row_heights=row_heights,
         vertical_spacing=0.03,
     )
 
@@ -458,12 +534,36 @@ def _spy_chart(df, ma_periods: list, prev_close: float | None = None) -> go.Figu
             opacity=0.5,
             name="Volume",
             showlegend=False,
-        ), row=2, col=1)
+        ), row=vol_row, col=1)
+
+    # RSI subplot
+    if show_rsi and rsi_row:
+        rsi = compute_rsi(df)
+        fig.add_trace(go.Scatter(
+            x=df.index, y=rsi,
+            name="RSI (14)",
+            line=dict(color="#A78BFA", width=1.5),
+            hovertemplate="RSI: %{y:.1f}<extra></extra>",
+        ), row=rsi_row, col=1)
+
+        fig.add_hrect(y0=70, y1=100, fillcolor="rgba(239,68,68,0.08)",
+                      line_width=0, row=rsi_row, col=1)
+        fig.add_hrect(y0=0,  y1=30,  fillcolor="rgba(34,197,94,0.08)",
+                      line_width=0, row=rsi_row, col=1)
+
+        for level, label, color in [(70, "OB 70", "#EF4444"),
+                                     (50, "50",    "#64748B"),
+                                     (30, "OS 30", "#22C55E")]:
+            fig.add_hline(y=level, line_dash="dot", line_color=color, line_width=1,
+                          annotation_text=label, annotation_position="right",
+                          annotation_font_size=9, row=rsi_row, col=1)
+
+        fig.update_yaxes(title_text="RSI", range=[0, 100], row=rsi_row, col=1)
 
     fig.update_layout(
         template="plotly_dark",
-        height=460,
-        margin=dict(l=60, r=60, t=10, b=40),
+        height=460 + (200 if show_rsi else 0),
+        margin=dict(l=60, r=80, t=10, b=40),
         xaxis_rangeslider_visible=False,
         legend=dict(orientation="h", y=1.04, x=0),
         yaxis=dict(title="Price", gridcolor="#1E293B"),
@@ -471,5 +571,8 @@ def _spy_chart(df, ma_periods: list, prev_close: float | None = None) -> go.Figu
         hovermode="x unified",
     )
     return fig
+
+
+render_spy_dashboard_tab()
 
 

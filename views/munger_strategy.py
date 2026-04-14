@@ -14,29 +14,45 @@ def render_munger_tab() -> None:
         "long-term compounding machines."
     )
 
+    # ── URL params ────────────────────────────────────────────────────────────
+    params    = st.query_params
+    auto_scan = params.get("scan", "0") == "1"
+    try:    _url_dist    = max(5,  min(30, int(params.get("dist",    15))))
+    except: _url_dist    = 15
+    try:    _url_quality = max(10, min(60, int(params.get("quality", 30))))
+    except: _url_quality = 30
+    try:    _url_top     = max(10, min(50, int(params.get("top",     30))))
+    except: _url_top     = 30
+
     # ── Controls ──────────────────────────────────────────────────────────────
     c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
     threshold = c1.slider(
         "Max distance from MA 200W (%)",
-        min_value=5, max_value=30, value=15, step=5,
+        min_value=5, max_value=30, value=_url_dist, step=5,
         help="Only include stocks whose price is within this % of the 200-week MA",
     )
     min_quality = c2.slider(
         "Min Quality Score",
-        min_value=10, max_value=60, value=30, step=5,
+        min_value=10, max_value=60, value=_url_quality, step=5,
         help="Quality Score is built from ROE, Profit Margin, Revenue Growth, D/E, EPS Growth (max 85)",
     )
     top_n = c3.slider(
         "Max results",
-        min_value=10, max_value=50, value=30, step=5,
+        min_value=10, max_value=50, value=_url_top, step=5,
     )
     scan_btn = c4.button("🔍 Scan", width='stretch', type="primary")
 
     st.markdown("---")
 
-    if not scan_btn:
+    if not scan_btn and not auto_scan:
         _render_legend()
         return
+
+    # Sync current filter state into URL so the page is shareable
+    st.query_params["dist"]    = str(threshold)
+    st.query_params["quality"] = str(min_quality)
+    st.query_params["top"]     = str(top_n)
+    st.query_params["scan"]    = "1"
 
     with st.spinner("🎩 Scanning for Munger-style setups…"):
         df = fetch_munger_candidates(
@@ -254,3 +270,7 @@ def _render_legend() -> None:
         | Munger ≥ 50 | 🟡 Solid setup |
         """)
     st.markdown("Adjust thresholds and click **Scan** to find candidates.")
+
+
+render_munger_tab()
+

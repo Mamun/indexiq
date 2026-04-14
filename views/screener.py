@@ -198,3 +198,7 @@ def _render_legend() -> None:
         `vs SPX` = stock 1M return minus S&P 500 1M return (positive = outperforming)
         `Vol` 🔼 = recent volume above 20-day avg · 🔽 = below
         """)
+
+
+render_screener_tab()
+
