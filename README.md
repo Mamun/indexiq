@@ -2,11 +2,18 @@
 
 [![CI](https://github.com/Mamun/indexiq/actions/workflows/ci.yml/badge.svg)](https://github.com/Mamun/indexiq/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Streamlit](https://img.shields.io/badge/built%20with-Streamlit-FF4B4B)](https://streamlit.io)
+[![Live App](https://img.shields.io/badge/Live%20App-stpicker.streamlit.app-brightgreen)](https://stpicker.streamlit.app/)
 [![Sponsor](https://img.shields.io/badge/Sponsor-❤-pink)](https://github.com/sponsors/Mamun)
 
 > **IndexIQ** is a free, open-source web app that gives retail investors institutional-grade technical analysis — moving averages, RSI, Fibonacci retracements, candlestick patterns, and AI-powered forecasts — without a Bloomberg terminal.
+
+## Try it now — no install needed
+
+**[https://stpicker.streamlit.app/](https://stpicker.streamlit.app/)**
+
+The live app runs on Streamlit Community Cloud and is free to use. No account or API key required.
 
 ---
 
