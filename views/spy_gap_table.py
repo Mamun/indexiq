@@ -1,8 +1,8 @@
 import pandas as pd
 import streamlit as st
 
-from data import fetch_spx_intraday
-from indicators import compute_daily_gaps, compute_rsi
+from data import fetch_spx_intraday, fetch_spx_quote
+from indicators import compute_daily_gaps, compute_rsi, patch_today_gap
 
 
 def render_spy_gap_table_page() -> None:
@@ -16,7 +16,8 @@ def render_spy_gap_table_page() -> None:
         st.error("Could not load SPY data. Try again shortly.")
         return
 
-    gaps_df = compute_daily_gaps(daily_df)
+    quote   = fetch_spx_quote()
+    gaps_df = patch_today_gap(compute_daily_gaps(daily_df), quote)
     gaps_df = gaps_df.copy()
 
     # Next-day price direction

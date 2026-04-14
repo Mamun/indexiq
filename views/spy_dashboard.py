@@ -4,7 +4,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from data import fetch_index_snapshot, fetch_spx_intraday, fetch_spx_quote, fetch_vix_history, fetch_vix_ohlc
-from indicators import compute_daily_gaps, compute_rsi
+from indicators import compute_daily_gaps, compute_rsi, patch_today_gap
 from views.ai_forecast import render_ai_forecast
 
 
@@ -69,7 +69,7 @@ def render_spy_dashboard_tab() -> None:
 
     # ── 5. Gap table ──────────────────────────────────────────────────────────
     if not daily_df.empty:
-        _render_spy_gap_table(daily_df)
+        _render_spy_gap_table(daily_df, quote)
 
     st.markdown("---")
 
@@ -248,7 +248,7 @@ def _render_vix_gap_table() -> None:
     )
 
 
-def _render_spy_gap_table(daily_df) -> None:
+def _render_spy_gap_table(daily_df, quote: dict) -> None:
     head_col, btn_col = st.columns([8, 1])
     head_col.markdown("#### Daily Gaps (Last 30 Days)")
     with btn_col:
@@ -261,7 +261,7 @@ def _render_spy_gap_table(daily_df) -> None:
                 share_url = "/spy-gaps"
             st.code(share_url, language=None)
             st.caption("Copy the link above to share this page.")
-    gaps_df = compute_daily_gaps(daily_df)
+    gaps_df = patch_today_gap(compute_daily_gaps(daily_df), quote)
 
     # Next-day price direction: shift Close up by 1 so each row shows tomorrow's close
     gaps_df = gaps_df.copy()

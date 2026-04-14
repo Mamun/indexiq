@@ -81,6 +81,33 @@ def compute_daily_gaps(df: pd.DataFrame) -> pd.DataFrame:
     return df_gap.dropna(subset=["Prev Close"])
 
 
+def patch_today_gap(gaps_df: pd.DataFrame, quote: dict) -> pd.DataFrame:
+    """Patch the most recent gap row with live intraday High/Low from the quote,
+    so today's gap fill status reflects real-time data instead of showing Pending."""
+    if gaps_df.empty:
+        return gaps_df
+
+    day_high = quote.get("day_high") or 0
+    day_low  = quote.get("day_low")  or 0
+    if not day_high or not day_low:
+        return gaps_df
+
+    gaps_df  = gaps_df.copy()
+    last_idx = gaps_df.index[-1]
+    gap        = gaps_df.at[last_idx, "Gap"]
+    prev_close = gaps_df.at[last_idx, "Prev Close"]
+
+    if pd.isna(gap) or gap == 0 or pd.isna(prev_close):
+        return gaps_df
+
+    # Determine fill using live intraday range
+    is_filled = (day_low <= prev_close) if gap > 0 else (day_high >= prev_close)
+
+    gaps_df.at[last_idx, "Gap Filled"]    = is_filled
+    gaps_df.at[last_idx, "Gap Confirmed"] = True   # live data = no need to wait for future bars
+    return gaps_df
+
+
 def compute_rsi(df: pd.DataFrame, period: int = 14) -> pd.Series:
     """
     Wilder's RSI.  Returns a Series named 'RSI' aligned to df.index.
