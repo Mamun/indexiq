@@ -1,10 +1,10 @@
 import pandas as pd
 import streamlit as st
 
-from charts import build_chart
+from indexiq.charts import build_chart
 
-from data import fetch_ohlcv, get_company_name, search_companies
-from indicators import (
+from indexiq.data import fetch_ohlcv, get_company_name, search_companies
+from indexiq.indicators import (
     compute_daily_gaps,
     compute_fibonacci,
     compute_mas,
@@ -12,7 +12,7 @@ from indicators import (
     compute_weekly_ma200,
     detect_reversal_patterns,
 )
-from signals import overall_signal, signal_score
+from indexiq.signals import overall_signal, signal_score
 
 _PERIODS = {
     "1M":  30,

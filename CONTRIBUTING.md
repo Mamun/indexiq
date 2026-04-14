@@ -19,8 +19,8 @@ Thank you for your interest in contributing! IndexIQ is a community-driven proje
 1. **Fork** the repository on GitHub.
 2. **Clone** your fork:
    ```bash
-   git clone https://github.com/<your-username>/picker.git
-   cd picker
+   git clone https://github.com/<your-username>/indexiq.git
+   cd indexiq
    ```
 3. Create a feature branch:
    ```bash
@@ -31,12 +31,12 @@ Thank you for your interest in contributing! IndexIQ is a community-driven proje
 
 ## Development setup
 
-**Requirements:** Python 3.11+
+**Requirements:** Python 3.10+
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -e .               # installs indexiq package + all dependencies
 pip install pytest pytest-cov ruff
 ```
 

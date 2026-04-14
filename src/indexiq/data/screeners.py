@@ -6,8 +6,8 @@ import pandas as pd
 import streamlit as st
 import yfinance as yf
 
-from config import SPX_TICKERS
-from indicators import compute_rsi
+from indexiq.config import SPX_TICKERS
+from indexiq.indicators import compute_rsi
 
 logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 

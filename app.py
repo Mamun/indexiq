@@ -9,7 +9,7 @@ for _key, _val in st.secrets.items():
     if isinstance(_val, str):
         os.environ.setdefault(_key, _val)
 
-from seo import inject_seo
+from indexiq.seo import inject_seo
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -28,17 +28,17 @@ inject_seo()
 
 # ── Navigation ────────────────────────────────────────────────────────────────
 pages = [
-    st.Page("views/spy_dashboard.py",   title="SPY Live",               icon="📈", url_path="spy",          default=True),
-    st.Page("views/spy_gap_table.py",    title="SPY Gap Table",          icon="📋", url_path="spy-gaps"),
-    st.Page("views/ai_forecast_page.py", title="SPY AI Forecast",        icon="🤖", url_path="spy-ai-forecast"),
-    st.Page("views/analyzer.py",        title="Stock Analyzer",         icon="🔬", url_path="analyzer"),
-    st.Page("views/screener.py",        title="Weekly/Monthly Screener",icon="📊", url_path="screener"),
-    st.Page("views/bounce_radar.py",    title="Bounce Radar",           icon="📡", url_path="bounce-radar"),
-    st.Page("views/squeeze_scanner.py", title="Squeeze Scanner",        icon="🔥", url_path="squeeze"),
-    st.Page("views/strong_buy.py",      title="Strong Buy",             icon="💎", url_path="strong-buy"),
-    st.Page("views/strong_sell.py",     title="Strong Sell",            icon="🔻", url_path="strong-sell"),
-    st.Page("views/munger_strategy.py", title="Munger Watchlist",       icon="🎩", url_path="munger"),
-    st.Page("views/about.py",           title="About",                  icon="ℹ️",  url_path="about"),
+    st.Page("src/indexiq/views/spy_dashboard.py",    title="SPY Live",                icon="📈", url_path="spy",          default=True),
+    st.Page("src/indexiq/views/spy_gap_table.py",    title="SPY Gap Table",           icon="📋", url_path="spy-gaps"),
+    st.Page("src/indexiq/views/ai_forecast_page.py", title="SPY AI Forecast",         icon="🤖", url_path="spy-ai-forecast"),
+    st.Page("src/indexiq/views/analyzer.py",         title="Stock Analyzer",          icon="🔬", url_path="analyzer"),
+    st.Page("src/indexiq/views/screener.py",         title="Weekly/Monthly Screener", icon="📊", url_path="screener"),
+    st.Page("src/indexiq/views/bounce_radar.py",     title="Bounce Radar",            icon="📡", url_path="bounce-radar"),
+    st.Page("src/indexiq/views/squeeze_scanner.py",  title="Squeeze Scanner",         icon="🔥", url_path="squeeze"),
+    st.Page("src/indexiq/views/strong_buy.py",       title="Strong Buy",              icon="💎", url_path="strong-buy"),
+    st.Page("src/indexiq/views/strong_sell.py",      title="Strong Sell",             icon="🔻", url_path="strong-sell"),
+    st.Page("src/indexiq/views/munger_strategy.py",  title="Munger Watchlist",        icon="🎩", url_path="munger"),
+    st.Page("src/indexiq/views/about.py",            title="About",                   icon="ℹ️",  url_path="about"),
 ]
 
 pg = st.navigation(pages)

@@ -1,16 +1,13 @@
 """Unit tests for signals.py"""
 
-import sys
-import os
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from signals import signal_score, overall_signal, find_crosses
-from indicators import compute_mas, compute_rsi
+from indexiq.signals import signal_score, overall_signal, find_crosses
+from indexiq.indicators import compute_mas, compute_rsi
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

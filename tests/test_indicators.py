@@ -1,15 +1,12 @@
 """Unit tests for indicators.py"""
 
-import sys
-import os
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from indicators import (
+from indexiq.indicators import (
     compute_mas,
     compute_fibonacci,
     compute_rsi,
@@ -18,7 +15,7 @@ from indicators import (
     compute_weekly_ma200,
     detect_reversal_patterns,
 )
-from config import MA_PERIODS, FIB_LEVELS
+from indexiq.config import MA_PERIODS, FIB_LEVELS
 
 
 # ── compute_mas ───────────────────────────────────────────────────────────────

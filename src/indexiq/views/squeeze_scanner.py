@@ -1,7 +1,7 @@
 import plotly.graph_objects as go
 import streamlit as st
 
-from data import fetch_squeeze_candidates
+from indexiq.data import fetch_squeeze_candidates
 
 
 def render_squeeze_scanner_tab() -> None:

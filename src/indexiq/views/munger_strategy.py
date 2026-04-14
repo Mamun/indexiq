@@ -1,7 +1,7 @@
 import plotly.graph_objects as go
 import streamlit as st
 
-from data import fetch_munger_candidates
+from indexiq.data import fetch_munger_candidates
 
 
 def render_munger_tab() -> None:

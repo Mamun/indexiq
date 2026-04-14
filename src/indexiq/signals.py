@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from config import MA_PERIODS
+from indexiq.config import MA_PERIODS
 
 
 def signal_score(row: pd.Series, prev_row: pd.Series) -> tuple[int, list[str]]:

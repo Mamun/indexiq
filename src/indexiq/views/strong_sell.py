@@ -1,7 +1,7 @@
 import plotly.graph_objects as go
 import streamlit as st
 
-from data import fetch_strong_sell_candidates
+from indexiq.data import fetch_strong_sell_candidates
 
 
 def render_strong_sell_tab() -> None:

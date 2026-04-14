@@ -3,9 +3,9 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from data import fetch_index_snapshot, fetch_spx_intraday, fetch_spx_quote, fetch_vix_history, fetch_vix_ohlc
-from indicators import compute_daily_gaps, compute_rsi, patch_today_gap
-from views.ai_forecast import render_ai_forecast
+from indexiq.data import fetch_index_snapshot, fetch_spx_intraday, fetch_spx_quote, fetch_vix_history, fetch_vix_ohlc
+from indexiq.indicators import compute_daily_gaps, compute_rsi, patch_today_gap
+from indexiq.views.ai_forecast import render_ai_forecast
 
 
 # ── Main dashboard tab ─────────────────────────────────────────────────────────

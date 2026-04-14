@@ -8,7 +8,7 @@ import anthropic
 import pandas as pd
 import streamlit as st
 
-from data.market import fetch_spx_quote
+from indexiq.data.market import fetch_spx_quote
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

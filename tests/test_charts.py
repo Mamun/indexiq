@@ -1,16 +1,13 @@
 """Unit tests for charts.py — verifies chart construction without a browser."""
 
-import sys
-import os
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import pytest
 import plotly.graph_objects as go
 
-from indicators import compute_mas, compute_rsi, compute_fibonacci, detect_reversal_patterns
-from signals import find_crosses
-from charts import build_chart
+from indexiq.indicators import compute_mas, compute_rsi, compute_fibonacci, detect_reversal_patterns
+from indexiq.signals import find_crosses
+from indexiq.charts import build_chart
 
 
 # ── Fixtures / helpers ────────────────────────────────────────────────────────

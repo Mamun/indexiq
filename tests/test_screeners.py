@@ -6,13 +6,10 @@ All tests are pure-logic (no network calls). We test:
 And inline score logic for bounce, squeeze, strong-buy, strong-sell.
 """
 
-import sys
-import os
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import pytest
-from data.screeners import _quality_score, _proximity_score
+from indexiq.data.screeners import _quality_score, _proximity_score
 
 
 # ── _quality_score ────────────────────────────────────────────────────────────

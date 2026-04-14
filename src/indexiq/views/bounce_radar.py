@@ -2,7 +2,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from data import fetch_bounce_candidates
+from indexiq.data import fetch_bounce_candidates
 
 
 def render_bounce_radar_tab() -> None:

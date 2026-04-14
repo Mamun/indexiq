@@ -1,8 +1,8 @@
 import pandas as pd
 import streamlit as st
 
-from data import fetch_spx_intraday, fetch_spx_quote
-from indicators import compute_daily_gaps, compute_rsi, patch_today_gap
+from indexiq.data import fetch_spx_intraday, fetch_spx_quote
+from indexiq.indicators import compute_daily_gaps, compute_rsi, patch_today_gap
 
 
 def render_spy_gap_table_page() -> None:

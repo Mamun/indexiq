@@ -32,8 +32,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip setuptools
+          pip install -e .
           pip install pytest pytest-cov
 
       - name: Run tests
@@ -42,7 +42,7 @@ jobs:
           SCREENER_TICKER_COUNT: "5"
         run: |
           pytest tests/ \
-            --cov=. \
+            --cov=src \
             --cov-report=xml \
             --cov-report=term-missing \
             --tb=short \
@@ -75,7 +75,7 @@ jobs:
           pip install ruff
 
       - name: Run ruff
-        run: ruff check . --select=E,W,F --ignore=E501,W291,W293
+        run: ruff check src/ tests/ --select=E,W,F --ignore=E501,W291,W293
 
   streamlit-smoke:
     name: Streamlit import smoke test
@@ -91,13 +91,20 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install dependencies
+      - name: Install package
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip setuptools
+          pip install -e .
 
       - name: Verify core modules import cleanly
         env:
           ANTHROPIC_API_KEY: dummy-key-for-ci
         run: |
-          python -c "import config; import indicators; import signals; import charts; print('All core modules imported OK')"
+          python -c "
+          from indexiq.config import MA_PERIODS
+          from indexiq.indicators import compute_mas
+          from indexiq.signals import signal_score
+          from indexiq.charts import build_chart
+          from indexiq.data.fetch import fetch_ohlcv
+          print('All core modules imported OK')
+          "
