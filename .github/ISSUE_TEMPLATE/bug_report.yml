@@ -1,0 +1,88 @@
+name: Bug Report
+description: Something is broken or behaving unexpectedly
+labels: ["bug", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the sections below so we can reproduce and fix it quickly.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+      placeholder: "When I open the Stock Analyzer page and enter ticker AAPL, the chart fails to load with an error..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps to reproduce the issue.
+      placeholder: |
+        1. Open the app (`streamlit run app.py`)
+        2. Navigate to ...
+        3. Enter ticker ...
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What should have happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message / traceback
+      description: Paste any error output here (use ``` fences for code).
+      render: text
+
+  - type: input
+    id: python_version
+    attributes:
+      label: Python version
+      placeholder: "e.g. 3.11.9"
+    validations:
+      required: true
+
+  - type: input
+    id: streamlit_version
+    attributes:
+      label: Streamlit version
+      placeholder: "e.g. 1.35.0  (run: pip show streamlit)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: page
+    attributes:
+      label: Which page is affected?
+      multiple: true
+      options:
+        - SPY Live
+        - SPY Gap Table
+        - SPY AI Forecast
+        - Stock Analyzer
+        - Weekly/Monthly Screener
+        - Bounce Radar
+        - Squeeze Scanner
+        - Strong Buy
+        - Strong Sell
+        - Munger Watchlist
+        - About
+        - All pages / startup
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, logs, or anything else that might help.
