@@ -75,6 +75,7 @@ def inject_seo() -> None:
     Call once at the top of app.py.
     Injects meta tags into <head> via JS and emits JSON-LD structured data.
     """
+    _gverify = _site.get("google_verification", "")
     meta_rows = [
         # Standard
         ("name",     "description",        _DESCRIPTION),
@@ -94,6 +95,8 @@ def inject_seo() -> None:
         ("property", "og:image:width",     str(_site["image_width"])),
         ("property", "og:image:height",    str(_site["image_height"])),
         ("property", "og:image:alt",       f"{_site['name']} — {_TITLE}"),
+        # Google Search Console ownership verification
+        *([("name", "google-site-verification", _gverify)] if _gverify else []),
         # Twitter Card
         ("name",     "twitter:card",       "summary_large_image"),
         ("name",     "twitter:title",      _TITLE),
