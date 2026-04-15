@@ -46,15 +46,32 @@ def render_ai_forecast(gaps_df: pd.DataFrame, show_share_btn: bool = True) -> No
         )
         return
 
-    market_open = is_market_open()
-    et          = timezone(timedelta(hours=-4))
-    now_et      = datetime.now(et)
+    et     = timezone(timedelta(hours=-4))
+    now_et = datetime.now(et)
 
+    # ── Gate: only call the API when the user explicitly requests it ──────────
+    cache_key = now_et.strftime("%Y-%m-%d-%H")   # changes once per hour
+    state_key = f"ai_forecast_{cache_key}"       # unique per hour-slot
+
+    if state_key not in st.session_state:
+        market_open = is_market_open()
+        if not market_open and now_et.weekday() >= 5:
+            st.info(f"Market closed (weekend). Next update at {next_market_open_str()}.", icon="🗓️")
+        st.button(
+            "🤖 Generate AI Forecast",
+            key="ai_forecast_btn",
+            type="primary",
+            help="Calls Claude AI — cached for 1 hour after first load",
+            on_click=lambda: st.session_state.update({state_key: True}),
+        )
+        st.caption("Forecast is generated on demand to save API costs · cached for 1 hour once loaded")
+        return
+
+    market_open = is_market_open()
     if not market_open and now_et.weekday() >= 5:
         st.info(f"Market closed (weekend). Next update at {next_market_open_str()}.", icon="🗓️")
 
     context_json = build_forecast_context(gaps_df, quote)
-    cache_key    = now_et.strftime("%Y-%m-%d-%H")   # changes once per hour
 
     with st.spinner("Generating AI forecast…"):
         try:
