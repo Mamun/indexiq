@@ -179,7 +179,7 @@ st.markdown("""
 with st.sidebar:
     # ── Buy Me a Coffee ───────────────────────────────────────────────────────
     st.markdown("""
-<a href="https://buymeacoffee.com/mamun" target="_blank" rel="noopener noreferrer"
+<a href="https://buymeacoffee.com/mamuninfo" target="_blank" rel="noopener noreferrer"
    style="display:block; text-decoration:none;">
   <div style="
     background: #FFDD00;
