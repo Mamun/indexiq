@@ -6,8 +6,8 @@ from indexiq.views.ai_forecast import render_ai_forecast
 
 
 def render_ai_forecast_page() -> None:
-    st.title("🤖 SPY AI Forecast")
-    st.caption("AI-generated SPY price forecast · Updates hourly · Powered by Claude")
+    st.title("🤖 SPY AI Outlook")
+    st.caption("AI-generated SPY price outlook · Updates hourly · Powered by your choice of AI provider")
 
     with st.expander("How is this forecast generated?", expanded=False):
         st.markdown("""

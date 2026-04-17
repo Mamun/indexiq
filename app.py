@@ -100,10 +100,13 @@ def _show_overloaded_page():
     st.stop()
 
 try:
-    # Inject Streamlit secrets into os.environ so all modules can use os.environ.get()
-    for _key, _val in st.secrets.items():
-        if isinstance(_val, str):
-            os.environ.setdefault(_key, _val)
+    # Inject Streamlit secrets into os.environ (Streamlit Cloud only — no-op locally)
+    try:
+        for _key, _val in st.secrets.items():
+            if isinstance(_val, str):
+                os.environ.setdefault(_key, _val)
+    except Exception:
+        pass  # No secrets.toml locally — keys come from .env via load_dotenv()
 
     # Ensure src/ is on the path so `indexiq` resolves on Streamlit Cloud
     _src = os.path.join(os.path.dirname(__file__), "src")
@@ -122,7 +125,7 @@ inject_seo()
 pages = {
     "Market": [
         st.Page("src/indexiq/views/spy_dashboard.py",    title="SPY Dashboard",           icon="📈", url_path="spy",             default=True),
-        st.Page("src/indexiq/views/ai_forecast_page.py", title="AI 10-Day Forecast",       icon="🤖", url_path="spy-ai-forecast"),
+        st.Page("src/indexiq/views/ai_forecast_page.py", title="SPY AI Outlook",       icon="🤖", url_path="spy-ai-forecast"),
         st.Page("src/indexiq/views/spy_gap_table.py",    title="SPY Gap Table",           icon="📋", url_path="spy-gaps"),
     ],
     "S&P 500 Tools": [
