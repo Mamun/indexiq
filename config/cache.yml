@@ -20,6 +20,7 @@ screeners:
   fetch_nasdaq_oversold: 1800        # NASDAQ-100 oversold RSI scanner
   fetch_premarket_scan: 300          # Premarket movers — 5-min cache (prices change rapidly)
   fetch_premarket_history: 3600      # 7-day daily close history — refresh hourly
+  fetch_etf_scan: 900               # ETF scanner — 15-min cache
 
 ai:
   fetch_ai_prediction: 3600     # Claude AI forecast — refresh hourly

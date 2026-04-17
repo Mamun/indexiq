@@ -212,10 +212,10 @@ def render_ai_forecast(gaps_df: pd.DataFrame, show_share_btn: bool = True) -> No
             Your sponsorship directly funds API costs, server capacity, and new features —
             so more traders can access professional-grade analysis without paying a subscription.
         </div>
-        <a href="https://github.com/sponsors/Mamun" target="_blank" rel="noopener noreferrer"
+        <a href="https://buymeacoffee.com/mamuninfo" target="_blank" rel="noopener noreferrer"
            style="
                display: inline-block;
-               background: #F1C40F;
+               background: #FFDD00;
                color: #0F172A;
                font-weight: 700;
                font-size: 0.9rem;
@@ -223,7 +223,7 @@ def render_ai_forecast(gaps_df: pd.DataFrame, show_share_btn: bool = True) -> No
                border-radius: 6px;
                text-decoration: none;
            ">
-            ⭐ Become a Sponsor
+            ☕ Buy Me a Coffee
         </a>
     </div>
 </div>

@@ -140,6 +140,7 @@ pages = {
         st.Page("src/stockiq/views/scanner_strong_buy.py",      title="Analyst Buy Picks",      icon="💎", url_path="strong-buy"),
         st.Page("src/stockiq/views/scanner_strong_sell.py",     title="Analyst Sell Picks",     icon="🔻", url_path="strong-sell"),
         st.Page("src/stockiq/views/scanner_munger_strategy.py", title="Munger Value Picks",     icon="🎩", url_path="munger"),
+        st.Page("src/stockiq/views/scanner_etf.py",             title="ETF Scanner",            icon="🌐", url_path="etf-scanner"),
     ],
     "Info": [
         st.Page("src/stockiq/views/about.py",            title="About StockIQ",           icon="ℹ️",  url_path="about"),

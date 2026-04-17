@@ -17,6 +17,7 @@ from stockiq.data.market import (
 )
 from stockiq.data.screeners import (
     fetch_bounce_candidates,
+    fetch_etf_scan,
     fetch_munger_candidates,
     fetch_nasdaq_oversold,
     fetch_nasdaq_rsi_scan,
@@ -39,6 +40,7 @@ __all__ = [
     "fetch_vix_history",
     "fetch_vix_ohlc",
     "fetch_bounce_candidates",
+    "fetch_etf_scan",
     "fetch_munger_candidates",
     "fetch_spx_recommendations",
     "fetch_squeeze_candidates",
