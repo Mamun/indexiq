@@ -36,7 +36,31 @@ The live app runs on Streamlit Community Cloud and is free to use. No account or
 
 ## Screenshots
 
-> _Coming soon — feel free to add screenshots in a PR!_
+### SPY Gap Fill Tracker
+Track every daily gap since 2022 with live fill status, intraday High/Low, RSI, and next-day direction — updated in real time during the session.
+
+![SPY Gap Table](docs/screenshots/spy_gaptable.png)
+
+---
+
+### AI-Powered SPY Forecast
+Claude analyses recent gaps, RSI, and price action to generate a 10-day directional outlook with key levels and a plain-English rationale.
+
+![SPY AI Forecast](docs/screenshots/spy_ai_claude_forecast.png)
+
+---
+
+### Stock Analyzer
+Interactive candlestick chart with MA5/20/50/100/200, weekly MA200, RSI subplot, Fibonacci retracement, seven reversal patterns, and a signal score card.
+
+![Stock Analyzer](docs/screenshots/analyzer.png)
+
+---
+
+### ETF Scanner
+Curated ETF categories — Retail Favorites, Semiconductors, Software — ranked by RSI and momentum for quick sector rotation ideas.
+
+![ETF Scanner](docs/screenshots/etf_scanner.png)
 
 ---
 
