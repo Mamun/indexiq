@@ -34,19 +34,24 @@ def render_gap_table(
         height:        Dataframe display height in pixels.
     """
     # ── Header row ────────────────────────────────────────────────────────────
+    _pending_note = (
+        '<span style="font-size:11px;color:#64748B;font-weight:400;margin-left:10px">'
+        '⏳ Pending = gap not yet filled, confirms within 3 trading days'
+        '</span>'
+    )
     if share_url:
         head_col, btn_col = st.columns([8, 1])
-        head_col.markdown(f"#### {title}")
+        head_col.markdown(f"#### {title} {_pending_note}", unsafe_allow_html=True)
         with btn_col:
             with st.popover("🔗 Share", use_container_width=True):
                 st.code(share_url, language=None)
                 st.caption("Copy the link above to share this page.")
     else:
-        st.markdown(f"#### {title}")
+        st.markdown(f"#### {title} {_pending_note}", unsafe_allow_html=True)
 
     # ── Build display DataFrame ───────────────────────────────────────────────
     has_vol = "Volume" in gaps_df.columns
-    base_cols = ["Open", "Prev Close", "Gap", "Gap %", "Gap Filled", "Gap Confirmed"]
+    base_cols = ["Open", "Close", "High", "Low", "Gap", "Gap %", "Gap Filled", "Gap Confirmed"]
     if has_vol:
         base_cols.insert(2, "Volume")
     if show_rsi and "RSI" in gaps_df.columns:
@@ -57,10 +62,10 @@ def render_gap_table(
     gaps_data = gaps_df.tail(rows)[base_cols].reset_index()
 
     # Rename columns to display-friendly names
-    col_names = ["Date", "Open", "Prev Close"]
+    col_names = ["Date", "Open", "Close"]
     if has_vol:
         col_names.append("Volume")
-    col_names += ["Gap $", "Gap %", "Filled", "Gap Confirmed"]
+    col_names += ["High", "Low", "Gap $", "Gap %", "Filled", "Gap Confirmed"]
     if show_rsi and "RSI" in gaps_df.columns:
         col_names.append("RSI")
     if show_next_day and "Next Day" in gaps_df.columns:
@@ -86,7 +91,7 @@ def render_gap_table(
         )
 
     # ── Select display columns ────────────────────────────────────────────────
-    display_cols = ["Date", "Open", "Prev Close"]
+    display_cols = ["Date", "Open", "Close", "High", "Low"]
     if has_vol:
         display_cols.append("Volume")
     display_cols += ["Gap $", "Gap %", "Status"]
@@ -138,10 +143,12 @@ def render_gap_table(
     # ── Format spec ───────────────────────────────────────────────────────────
     p = price_prefix
     fmt = {
-        "Open":       f"{p}{{:.2f}}",
-        "Prev Close": f"{p}{{:.2f}}",
-        "Gap $":      f"{p}{{:.2f}}",
-        "Gap %":      "{:+.2f}%",
+        "Open":  f"{p}{{:.2f}}",
+        "Close": f"{p}{{:.2f}}",
+        "High":  f"{p}{{:.2f}}",
+        "Low":   f"{p}{{:.2f}}",
+        "Gap $": f"{p}{{:.2f}}",
+        "Gap %": "{:+.2f}%",
     }
     if has_rsi_col:
         fmt["RSI"] = "{:.1f}"

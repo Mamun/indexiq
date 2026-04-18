@@ -20,6 +20,14 @@ def render_spy_gap_table_page() -> None:
     quote   = fetch_spx_quote()
     gaps_df = patch_today_gap(compute_daily_gaps(daily_df), quote)
     gaps_df = gaps_df.copy()
+    if not gaps_df.empty:
+        last = gaps_df.index[-1]
+        if quote.get("price"):
+            gaps_df.at[last, "Close"] = round(float(quote["price"]), 2)
+        if quote.get("day_high"):
+            gaps_df.at[last, "High"] = round(float(quote["day_high"]), 2)
+        if quote.get("day_low"):
+            gaps_df.at[last, "Low"] = round(float(quote["day_low"]), 2)
 
     # Next-day price direction
     gaps_df["Next Close"] = gaps_df["Close"].shift(-1)

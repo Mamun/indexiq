@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from stockiq.data import fetch_index_snapshot, fetch_put_call_ratio, fetch_spx_intraday, fetch_spx_quote, fetch_vix_history, fetch_vix_ohlc
+from stockiq.data import fetch_index_snapshot, fetch_ohlcv, fetch_put_call_ratio, fetch_spx_intraday, fetch_spx_quote, fetch_vix_history, fetch_vix_ohlc
 from stockiq.data.gap_cache import apply_gap_cache, save_confirmed_gaps
 from stockiq.data.ohlc_cache import enrich_with_cache
 from stockiq.models.indicators import compute_daily_gaps, compute_rsi, patch_today_gap
@@ -27,6 +27,9 @@ def render_spy_dashboard_tab() -> None:
 
     # ── 2. SPY technical snapshot (single row) ────────────────────────────────
     daily_df = enrich_with_cache(fetch_spx_intraday(period="1y", interval="1d"), "SPY")
+    # Fetch longer history for stable RSI warmup (same approach as analyzer: period + 1450 extra days)
+    spy_long_df = fetch_ohlcv("SPY", 365)
+    rsi_long = compute_rsi(spy_long_df)
     render_spy_summary_card(quote, quote["price"], quote["change"], quote["change_pct"], daily_df)
 
     st.divider()
@@ -43,7 +46,7 @@ def render_spy_dashboard_tab() -> None:
 
     # ── 5. SPY gap table ──────────────────────────────────────────────────────
     if not daily_df.empty:
-        _render_spy_gap_table(daily_df, quote)
+        _render_spy_gap_table(daily_df, quote, rsi_long)
 
     st.divider()
 
@@ -54,7 +57,7 @@ def render_spy_dashboard_tab() -> None:
     if not daily_df.empty:
         try:
             gaps_df_for_ai = apply_gap_cache(patch_today_gap(compute_daily_gaps(daily_df), quote))
-            rsi_dedup = compute_rsi(daily_df)[~daily_df.index.duplicated(keep="last")]
+            rsi_dedup = rsi_long[~spy_long_df.index.duplicated(keep="last")]
             gaps_df_for_ai["RSI"] = rsi_dedup.reindex(gaps_df_for_ai.index)
             with ai_slot.container():
                 render_ai_forecast(gaps_df_for_ai)
@@ -359,9 +362,17 @@ def _spy_vix_chart(df) -> go.Figure:
     return fig
 
 
-def _render_spy_gap_table(daily_df: pd.DataFrame, quote: dict) -> None:
+def _render_spy_gap_table(daily_df: pd.DataFrame, quote: dict, rsi_series: pd.Series | None = None) -> None:
     gaps_df = apply_gap_cache(patch_today_gap(compute_daily_gaps(daily_df), quote))
     save_confirmed_gaps(gaps_df)
+    if not gaps_df.empty:
+        last = gaps_df.index[-1]
+        if quote.get("price"):
+            gaps_df.at[last, "Close"] = round(float(quote["price"]), 2)
+        if quote.get("day_high"):
+            gaps_df.at[last, "High"] = round(float(quote["day_high"]), 2)
+        if quote.get("day_low"):
+            gaps_df.at[last, "Low"] = round(float(quote["day_low"]), 2)
 
     gaps_df["Next Close"] = gaps_df["Close"].shift(-1)
     gaps_df["Next Day"] = gaps_df.apply(
@@ -370,7 +381,8 @@ def _render_spy_gap_table(daily_df: pd.DataFrame, quote: dict) -> None:
                   else "—"),
         axis=1,
     )
-    rsi_dedup = compute_rsi(daily_df)[~daily_df.index.duplicated(keep="last")]
+    src = rsi_series if rsi_series is not None else compute_rsi(daily_df)
+    rsi_dedup = src[~src.index.duplicated(keep="last")]
     gaps_df["RSI"] = rsi_dedup.reindex(gaps_df.index)
 
     try:
