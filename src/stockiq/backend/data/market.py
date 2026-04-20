@@ -118,16 +118,20 @@ def fetch_put_call_ratio(scope: str = "daily") -> dict | None:
     Compute SPY put/call ratio from option activity.
 
     scope:
-      "daily"     — today's volume across the 4 nearest expirations
-      "monthly"   — open interest across expirations within the next 30 days
-      "quarterly" — open interest across expirations within the next 90 days
+      "daily"   — today's volume across the 4 nearest expirations
+      "7d"      — open interest across expirations within 7 days
+      "14d"     — open interest across expirations within 14 days
+      "21d"     — open interest across expirations within 21 days
+      "monthly" — open interest across expirations within 30 days
     """
     from datetime import datetime, timedelta
 
     _SCOPE_META = {
-        "daily":     {"label": "Daily",     "note": "Today's volume · 4 nearest expirations · resets daily"},
-        "monthly":   {"label": "Monthly",   "note": "Open interest · expirations ≤ 30 days out"},
-        "quarterly": {"label": "Quarterly", "note": "Open interest · expirations ≤ 90 days out"},
+        "daily":  {"label": "Daily",   "note": "Today's volume · 4 nearest expirations · resets daily"},
+        "7d":     {"label": "7 Days",  "note": "Open interest · expirations within 7 days"},
+        "14d":    {"label": "14 Days", "note": "Open interest · expirations within 14 days"},
+        "21d":    {"label": "21 Days", "note": "Open interest · expirations within 21 days"},
+        "monthly":{"label": "Monthly", "note": "Open interest · expirations ≤ 30 days out"},
     }
 
     try:
@@ -141,16 +145,14 @@ def fetch_put_call_ratio(scope: str = "daily") -> dict | None:
         if scope == "daily":
             expirations = all_exps[:4]
             prefer_volume = True
-        elif scope == "monthly":
-            cutoff = today + timedelta(days=30)
+        elif scope in ("7d", "14d", "21d", "monthly"):
+            days = {"7d": 7, "14d": 14, "21d": 21, "monthly": 30}[scope]
+            cutoff = today + timedelta(days=days)
             expirations = [e for e in all_exps
                            if datetime.strptime(e, "%Y-%m-%d").date() <= cutoff]
             prefer_volume = False
-        else:  # quarterly
-            cutoff = today + timedelta(days=90)
-            expirations = [e for e in all_exps
-                           if datetime.strptime(e, "%Y-%m-%d").date() <= cutoff]
-            prefer_volume = False
+        else:
+            return None
 
         if not expirations:
             return None
