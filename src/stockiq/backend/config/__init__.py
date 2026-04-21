@@ -14,6 +14,7 @@ Exports:
   SPX_TICKERS              — S&P 500 ticker universe for scanners
   NASDAQ_100_TICKERS       — NASDAQ-100 ticker universe
   SCREENER_TICKER_COUNT    — how many SPX tickers to scan (env-overridable)
+  QUOTE_SPY_PROVIDERS      — ordered list of quote providers for SPY live price
   OPTIONS_SPY_PROVIDERS    — ordered list of options data providers for SPY
 """
 
@@ -29,6 +30,7 @@ _root_config = Path(__file__).parent.parent.parent.parent.parent / "config"
 with open(_backend_dir / "app.yml") as _f:
     _app: dict = yaml.safe_load(_f)
 
+QUOTE_SPY_PROVIDERS:   list[str] = _app["quote"]["spy_providers"]
 OPTIONS_SPY_PROVIDERS: list[str] = _app["options"]["spy_providers"]
 
 # ── Cache TTLs (backend-only) ──────────────────────────────────────────────────

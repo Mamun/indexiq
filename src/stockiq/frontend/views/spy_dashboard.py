@@ -109,6 +109,17 @@ def _render_header(quote: dict, idx_df: pd.DataFrame) -> None:
     clr     = "#22C55E" if chg >= 0 else "#EF4444"
     arrow   = "▲" if chg >= 0 else "▼"
 
+    ts = quote.get("_ts", 0)
+    if ts:
+        import pytz
+        as_of = (
+            pd.Timestamp(ts, unit="s", tz="UTC")
+            .tz_convert("America/New_York")
+            .strftime("%-I:%M %p ET · %b %-d")
+        )
+    else:
+        as_of = "time unknown"
+
     title_col, indices_col = st.columns([1, 3])
 
     with title_col:
@@ -126,7 +137,7 @@ def _render_header(quote: dict, idx_df: pd.DataFrame) -> None:
     </span>
   </div>
   <div style="font-size:10px;color:#475569;margin-top:4px">
-    Refreshes every 60 s · ~15 min delayed
+    as of {as_of} · refreshes every 60 s
   </div>
 </div>""",
             unsafe_allow_html=True,
@@ -500,11 +511,6 @@ def _render_options_section(current_price: float) -> None:
         "21 Days": "Open interest · expirations within 21 days",
         "Monthly": "Open interest · expirations ≤ 30 days out",
     }
-    _, pc_scope_col = st.columns([2, 1])
-    with pc_scope_col:
-        pc_scope = st.radio("P/C Scope", _scope_opts, horizontal=True, key="pc_scope", index=0)
-    pc = get_put_call_ratio(scope=_scope_keys[pc_scope])
-
     # Seed call — nearest expiration + full list
     seed = get_spy_options_analysis(expiration="", current_price=current_price)
     if not seed:
@@ -512,7 +518,10 @@ def _render_options_section(current_price: float) -> None:
         return
 
     exp_map = dict(zip(seed["exp_labels"], seed["expirations"]))
-    exp_col, _ = st.columns([2, 3])
+
+    scope_col, exp_col, _ = st.columns([1, 1, 3])
+    with scope_col:
+        pc_scope = st.radio("P/C Scope", _scope_opts, horizontal=True, key="pc_scope", index=0)
     with exp_col:
         selected_label = st.selectbox(
             "Expiration",
@@ -520,7 +529,9 @@ def _render_options_section(current_price: float) -> None:
             index=0,
             key="options_exp",
         )
+
     selected_iso = exp_map[selected_label]
+    pc = get_put_call_ratio(scope=_scope_keys[pc_scope])
 
     data = get_spy_options_analysis(expiration=selected_iso, current_price=current_price)
     if not data:

@@ -4,6 +4,7 @@
 
 market:
   fetch_spx_quote: 60           # Live SPY price — refresh every minute
+  fetch_spx_quote_cboe: 60      # CBOE fallback SPY quote — refresh every minute
   fetch_spx_intraday: 120       # SPY bars — refresh every 2 minutes
   fetch_vix_ohlc: 3600          # VIX OHLC — refresh hourly
   fetch_vix_history: 3600       # SPY + VIX dual-axis history — refresh hourly

@@ -43,6 +43,7 @@ def build_forecast_context(
     daily_df: pd.DataFrame | None = None,
     vix_df: pd.DataFrame | None = None,
     pc_data: dict | None = None,
+    options_flow: dict | None = None,
 ) -> str:
     """Build the JSON context string passed to the AI forecast prompt."""
     completed_gaps = gaps_df.iloc[:-1]
@@ -143,6 +144,15 @@ def build_forecast_context(
         context["put_call_ratio"] = {
             "ratio":  pc_data["ratio"],
             "signal": pc_data["signal"],
+        }
+
+    if options_flow:
+        context["options_flow"] = {
+            "expiration": options_flow["expiration"],
+            "max_pain":   options_flow["max_pain"],
+            "dist_pct":   options_flow["dist_pct"],
+            "call_wall":  options_flow["call_wall"],
+            "put_wall":   options_flow["put_wall"],
         }
 
     return json.dumps(context)

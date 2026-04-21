@@ -1,13 +1,15 @@
 """SPY-specific data assembly service."""
 
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from stockiq.backend.config import OPTIONS_SPY_PROVIDERS
+from stockiq.backend.config import OPTIONS_SPY_PROVIDERS, QUOTE_SPY_PROVIDERS
 from stockiq.backend.data.spy import (
     fetch_put_call_ratio,
     fetch_put_call_ratio_cboe,
     fetch_spx_intraday,
     fetch_spx_quote,
+    fetch_spx_quote_cboe,
     fetch_spy_options_data,
     fetch_spy_options_data_cboe,
 )
@@ -17,6 +19,10 @@ from stockiq.backend.data.yf_fetch import fetch_ohlcv
 from stockiq.backend.models.indicators import compute_daily_gaps, compute_rsi, patch_today_gap
 from stockiq.backend.models.options import compute_max_pain, compute_oi_by_strike, label_expirations
 
+_QUOTE_FETCHERS = {
+    "yahoo": fetch_spx_quote,
+    "cboe":  fetch_spx_quote_cboe,
+}
 _OPTIONS_CHAIN_FETCHERS = {
     "yahoo": fetch_spy_options_data,
     "cboe":  fetch_spy_options_data_cboe,
@@ -28,8 +34,35 @@ _PCR_FETCHERS = {
 
 
 def get_spy_quote() -> dict:
-    """Live SPY price, change, high/low, volume. Cached 60 s."""
-    return fetch_spx_quote()
+    """
+    Live SPY quote — fetches all configured providers in parallel, returns the freshest result.
+    Freshness is determined by the _ts (Unix timestamp) field each fetcher includes.
+    Falls back to any non-empty result when timestamps are unavailable.
+    """
+    fetchers = [_QUOTE_FETCHERS[p] for p in QUOTE_SPY_PROVIDERS if p in _QUOTE_FETCHERS]
+    if not fetchers:
+        return {}
+
+    results: list[dict] = []
+    pool = ThreadPoolExecutor(max_workers=len(fetchers))
+    try:
+        futures = {pool.submit(f): f for f in fetchers}
+        try:
+            for future in as_completed(futures, timeout=12):
+                try:
+                    r = future.result()
+                    if r.get("price", 0) > 0:
+                        results.append(r)
+                except Exception:
+                    pass
+        except TimeoutError:
+            pass  # use whatever results arrived before timeout
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+
+    if not results:
+        return {}
+    return max(results, key=lambda r: r.get("_ts", 0))
 
 
 def _get_spy_daily_df() -> pd.DataFrame:
@@ -98,7 +131,7 @@ def get_put_call_ratio(scope: str = "daily") -> dict | None:
         fetcher = _PCR_FETCHERS.get(provider)
         if fetcher:
             result = fetcher(scope=scope)
-            if result:
+            if result and result.get("puts", 0) > 0 and result.get("calls", 0) > 0:
                 return result
     return None
 

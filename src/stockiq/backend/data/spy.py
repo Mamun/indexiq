@@ -40,33 +40,58 @@ def _pcr_signal(ratio: float) -> tuple[str, str]:
 
 @ttl_cache(CACHE_TTL["fetch_spx_quote"])
 def fetch_spx_quote() -> dict:
-    """Near-real-time SPY quote via yfinance fast_info. Cached 60 s. Returns {} on error."""
+    """SPY quote via yfinance .info — includes regularMarketTime for freshness comparison. Cached 60 s."""
     try:
-        fi    = yf.Ticker("SPY").fast_info
-        price = float(fi.last_price)
-        prev  = float(fi.previous_close)
-
-        vol = int(getattr(fi, "volume", 0) or 0)
-        if not vol:
-            try:
-                day_df = yf.download("SPY", period="1d", interval="1d", progress=False, auto_adjust=True)
-                if isinstance(day_df.columns, pd.MultiIndex):
-                    day_df.columns = day_df.columns.get_level_values(0)
-                vol = int(day_df["Volume"].iloc[-1]) if "Volume" in day_df.columns and not day_df.empty else 0
-            except Exception:
-                vol = 0
-
+        info  = yf.Ticker("SPY").info
+        price = float(info.get("regularMarketPrice") or info.get("currentPrice") or 0)
+        prev  = float(info.get("regularMarketPreviousClose") or info.get("previousClose") or 0)
+        if not price:
+            return {}
         return {
             "price":      price,
             "prev_close": prev,
-            "change":     price - prev,
-            "change_pct": (price - prev) / prev * 100,
-            "day_open":   float(getattr(fi, "open",               0) or 0),
-            "day_high":   float(getattr(fi, "day_high",            0) or 0),
-            "day_low":    float(getattr(fi, "day_low",             0) or 0),
-            "volume":     vol,
-            "w52_high":   float(getattr(fi, "fifty_two_week_high", 0) or 0),
-            "w52_low":    float(getattr(fi, "fifty_two_week_low",  0) or 0),
+            "change":     round(price - prev, 2),
+            "change_pct": round((price - prev) / prev * 100, 4) if prev else 0,
+            "day_open":   float(info.get("open")         or 0),
+            "day_high":   float(info.get("dayHigh")       or 0),
+            "day_low":    float(info.get("dayLow")        or 0),
+            "volume":     int(  info.get("volume")        or 0),
+            "w52_high":   float(info.get("fiftyTwoWeekHigh") or 0),
+            "w52_low":    float(info.get("fiftyTwoWeekLow")  or 0),
+            "_ts":        int(  info.get("regularMarketTime") or 0),
+        }
+    except Exception:
+        return {}
+
+
+@ttl_cache(CACHE_TTL["fetch_spx_quote_cboe"])
+def fetch_spx_quote_cboe() -> dict:
+    """SPY quote from CBOE CDN (15-min delayed). Same return shape as fetch_spx_quote. Returns {} on error."""
+    try:
+        resp = requests.get(_CBOE_SPY_URL, timeout=10, headers=_CBOE_HEADERS)
+        resp.raise_for_status()
+        d     = resp.json().get("data", {})
+        price = float(d.get("current_price") or 0)
+        prev  = float(d.get("prev_day_close") or 0)
+        if not price:
+            return {}
+        ts_str = d.get("last_trade_time") or ""
+        try:
+            ts = int(datetime.strptime(ts_str, "%Y-%m-%dT%H:%M:%S").timestamp())
+        except Exception:
+            ts = 0
+        return {
+            "price":      price,
+            "prev_close": prev,
+            "change":     round(float(d.get("price_change") or 0), 2),
+            "change_pct": round(float(d.get("price_change_percent") or 0), 4),
+            "day_open":   float(d.get("open")   or 0),
+            "day_high":   float(d.get("high")   or 0),
+            "day_low":    float(d.get("low")    or 0),
+            "volume":     int(d.get("volume")   or 0),
+            "w52_high":   None,
+            "w52_low":    None,
+            "_ts":        ts,
         }
     except Exception:
         return {}
