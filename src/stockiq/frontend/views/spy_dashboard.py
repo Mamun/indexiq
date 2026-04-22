@@ -486,7 +486,7 @@ The GEX chart shows which individual strikes carry the most stabilising or ampli
         selected_label = st.selectbox(
             "Expiration",
             options=list(exp_map.keys()),
-            index=0,
+            index=1,
             key="options_exp",
         )
 
