@@ -8,48 +8,72 @@ from stockiq.frontend.views.components.spy_charts import spy_candle_chart
 
 
 def render_spy_chart_section(quote: dict) -> None:
+    # Tuple: (yf_period, interval, MA_periods, show_prev_close, tail_n)
+    # tail_n: trim the full fetch to the last N candles; None = show all.
+    # "1H"/"2H" fetch a full day of 1m bars so VWAP cumulates correctly from open,
+    # then slice to the last 60/120 candles for display.
     period_map = {
-        "Today": ("1d",  "5m",  [],            True),
-        "5D":    ("5d",  "30m", [],            True),
-        "1M":    ("1mo", "1d",  [20],          False),
-        "3M":    ("3mo", "1d",  [20, 50],      False),
-        "6M":    ("6mo", "1d",  [20, 50, 200], False),
-        "1Y":    ("1y",  "1d",  [20, 50, 200], False),
+        "1H":    ("1d",  "1m",  [],            True,  60),
+        "2H":    ("1d",  "1m",  [],            True,  120),
+        "Today": ("1d",  "5m",  [],            True,  None),
+        "5D":    ("5d",  "30m", [],            True,  None),
+        "1M":    ("1mo", "1d",  [20],          False, None),
+        "3M":    ("3mo", "1d",  [20, 50],      False, None),
+        "6M":    ("6mo", "1d",  [20, 50, 200], False, None),
+        "1Y":    ("1y",  "1d",  [20, 50, 200], False, None),
     }
     keys = list(period_map)
     _qp  = st.query_params.get("period", "1Y")
-    default_idx = keys.index(_qp) if _qp in keys else 5
+    default_idx = keys.index(_qp) if _qp in keys else keys.index("1Y")
 
-    period_col, rsi_col = st.columns([6, 1])
-    with period_col:
-        choice = st.radio("Period", keys, horizontal=True, key="spy_period", index=default_idx)
-    show_rsi = rsi_col.checkbox("RSI", value=True)
+    choice = st.radio("Period", keys, horizontal=True, key="spy_period", index=default_idx)
     st.query_params["period"] = choice
 
-    yf_period, interval, mas, show_prev = period_map[choice]
-    chart_df = get_spy_chart_df(period=yf_period, interval=interval)
-    if chart_df.empty:
+    ck = st.columns(5)
+    show_rsi     = ck[0].checkbox("RSI",     value=True, key="spy_show_rsi")
+    show_vwap    = ck[1].checkbox("VWAP",    value=True, key="spy_show_vwap")
+    show_or      = ck[2].checkbox("OR",      value=True, key="spy_show_or")
+    show_levels  = ck[3].checkbox("Levels",  value=True, key="spy_show_levels")
+    show_options = ck[4].checkbox("Options", value=True, key="spy_show_options")
+
+    yf_period, interval, mas, show_prev, tail_n = period_map[choice]
+    full_df = get_spy_chart_df(period=yf_period, interval=interval)
+    if full_df.empty:
         st.info("Chart data unavailable — the market may be closed or data is delayed.")
         return
+
+    chart_df = full_df.iloc[-tail_n:] if tail_n and len(full_df) >= tail_n else full_df
 
     prev_close_line = quote["prev_close"] if show_prev else None
 
     vwap = vwap_u1 = vwap_l1 = vwap_u2 = vwap_l2 = None
-    if choice == "Today" and "Volume" in chart_df.columns and not chart_df["Volume"].isna().all():
-        vwap, vwap_u1, vwap_l1, vwap_u2, vwap_l2 = _compute_vwap_bands(chart_df)
+    if show_vwap and choice in ("1H", "2H", "Today") and "Volume" in full_df.columns and not full_df["Volume"].isna().all():
+        vwap_full, u1_full, l1_full, u2_full, l2_full = _compute_vwap_bands(full_df)
+        if tail_n:
+            vwap    = vwap_full.iloc[-tail_n:]
+            vwap_u1 = u1_full.iloc[-tail_n:]
+            vwap_l1 = l1_full.iloc[-tail_n:]
+            vwap_u2 = u2_full.iloc[-tail_n:]
+            vwap_l2 = l2_full.iloc[-tail_n:]
+        else:
+            vwap, vwap_u1, vwap_l1, vwap_u2, vwap_l2 = vwap_full, u1_full, l1_full, u2_full, l2_full
 
     pdh = pdl = pivot = r1 = s1 = None
-    if choice in ("Today", "5D"):
+    if show_levels and choice in ("1H", "2H", "Today", "5D"):
         pdh, pdl, pivot, r1, s1 = _compute_pivot_levels()
 
     or_high = or_low = None
-    if choice == "Today" and len(chart_df) >= 4:
-        _or = chart_df.head(6)
+    if show_or and choice in ("1H", "2H") and len(full_df) >= 15:
+        _or = full_df.head(15)          # 9:30–9:44 AM at 1m = 15 candles
+        or_high = float(_or["High"].max())
+        or_low  = float(_or["Low"].min())
+    elif show_or and choice == "Today" and len(chart_df) >= 3:
+        _or = chart_df.head(3)          # 9:30–9:44 AM at 5m = 3 candles
         or_high = float(_or["High"].max())
         or_low  = float(_or["Low"].min())
 
     max_pain = call_wall = put_wall = None
-    if not show_prev:
+    if show_options:
         try:
             seed = get_spy_options_analysis(expiration="", current_price=quote["price"])
             if seed:
