@@ -15,7 +15,8 @@ import pytz
 import pandas as pd
 import streamlit as st
 
-from stockiq.backend.services.spy_service import get_spy_options_analysis, get_put_call_ratio
+from stockiq.backend.services.spy_service import get_spy_options_analysis, get_put_call_ratio, get_vol_regime
+from stockiq.backend.models.options import compute_strategy_suggestion
 from stockiq.frontend.views.components.spy_charts import (
     oi_gex_combined_chart,
     oi_heatmap_chart,
@@ -47,7 +48,8 @@ def render_options_intelligence(current_price: float) -> None:
     else:
         expander_seed = seed
 
-    _render_what_is_expander(expander_seed, current_price)
+    vol = get_vol_regime()
+    _render_what_is_expander(expander_seed, current_price, vol)
 
     expirations = seed["expirations"]
     default_idx = expirations.index(today_iso) if today_iso in expirations else 0
@@ -86,6 +88,13 @@ def render_options_intelligence(current_price: float) -> None:
     gex_df = data.get("gex_df", pd.DataFrame())
     em     = data.get("expected_move")
 
+    _render_vol_regime_bar(vol)
+    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+
+    suggestion = compute_strategy_suggestion(current_price, em, pc, gex_df, oi_df, max_pain, vol)
+    _render_strategy_card(suggestion, selected_label)
+    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+
     cards_col, chart_col = st.columns([2, 5])
     with cards_col:
         r1c1, r1c2 = st.columns(2)
@@ -113,6 +122,9 @@ def render_options_intelligence(current_price: float) -> None:
         _render_signals_panel(_compute_signals(gex_df, oi_df, current_price, max_pain, selected_label))
     with squeeze_col:
         _render_gamma_squeeze_panel(_compute_gamma_squeeze(gex_df, oi_df, pc, current_price))
+
+    sweep_df = data.get("sweep_signals", pd.DataFrame())
+    _render_sweep_panel(sweep_df, selected_label, fetched_at)
 
     st.markdown(
         '<div style="font-size:11px;font-weight:700;color:#64748B;'
@@ -172,13 +184,13 @@ def _compute_signals(
     if not oi_df.empty:
         call_strike = float(oi_df.loc[oi_df["call_oi"].idxmax(), "strike"])
         put_strike  = float(oi_df.loc[oi_df["put_oi"].idxmax(),  "strike"])
-        signals.append({"type": "Magnet", "icon": "◎",
-                         "desc": "Price likely to gravitate toward this level",
+        signals.append({"type": "Call Wall", "icon": "◎",
+                         "desc": "Highest call OI strike — dealers sell as price approaches, capping upside",
                          "price": call_strike,
                          "dist": (call_strike - current_price) / current_price * 100,
                          "strength": "STRONG", "color": "#A78BFA"})
-        signals.append({"type": "Support", "icon": "▣",
-                         "desc": "Market dynamics change significantly if breached",
+        signals.append({"type": "Put Wall", "icon": "▣",
+                         "desc": "Highest put OI strike — dealers buy as price drops here, providing a floor",
                          "price": put_strike,
                          "dist": (put_strike - current_price) / current_price * 100,
                          "strength": "MODERATE", "color": "#22C55E"})
@@ -186,8 +198,8 @@ def _compute_signals(
     if max_pain:
         dist = (max_pain - current_price) / current_price * 100
         exp_note = f" · expires {exp_label}" if exp_label else ""
-        signals.append({"type": "Magnet", "icon": "◎",
-                         "desc": f"Max pain — price gravitates here into expiry{exp_note}",
+        signals.append({"type": "Max Pain", "icon": "◎",
+                         "desc": f"Strike where all open contracts expire worthless — price gravitates here{exp_note}",
                          "price": max_pain,
                          "dist": dist,
                          "strength": "STRONG", "color": "#A78BFA"})
@@ -199,7 +211,7 @@ def _compute_signals(
 def _render_signals_panel(signals: list[dict]) -> None:
     st.markdown(
         '<div style="font-size:11px;font-weight:700;color:#64748B;letter-spacing:.08em;'
-        'text-transform:uppercase;margin:20px 0 10px">⚡ Signals</div>',
+        'text-transform:uppercase;margin:20px 0 10px">⚡ Dealer Levels</div>',
         unsafe_allow_html=True,
     )
     if not signals:
@@ -533,7 +545,7 @@ def _render_gex_summary_card(gex_df: pd.DataFrame) -> None:
 
 # ── "What is?" expander ────────────────────────────────────────────────────────
 
-def _render_what_is_expander(seed: dict, current_price: float) -> None:
+def _render_what_is_expander(seed: dict, current_price: float, vol: dict | None = None) -> None:
     """Educational expander using live data from the seed (nearest expiration)."""
     oi_df  = seed.get("oi_df", pd.DataFrame())
     gex_df = seed.get("gex_df", pd.DataFrame())
@@ -597,6 +609,24 @@ def _render_what_is_expander(seed: dict, current_price: float) -> None:
         if em else "Expected move unavailable for this expiration."
     )
 
+    # ── Vol regime live text ──────────────────────────────────────────────────
+    if vol:
+        rank     = vol["iv_rank"]
+        hv30     = vol.get("hv30")
+        iv30     = vol["iv30"]
+        ratio    = vol.get("iv_hv_ratio")
+        rank_lbl = "High IV" if rank >= 50 else "Mid IV" if rank >= 30 else "Low IV"
+        vol_txt  = (
+            f'IV Rank **{rank:.0f}%** ({rank_lbl}) · HV30 (realized) **{hv30:.1f}%** · '
+            f'IV30 (VIX) **{iv30:.1f}%** · IV/HV **{ratio:.2f}×** — '
+            f'**{vol["strategy_bias"]}**: {vol["strategy_note"]}.'
+            if hv30 and ratio else
+            f'IV Rank **{rank:.0f}%** ({rank_lbl}) · VIX **{iv30:.1f}%** · '
+            f'**{vol["strategy_bias"]}**.'
+        )
+    else:
+        vol_txt = "Volatility regime data unavailable."
+
     with st.expander(f"What is Options Intelligence?  ·  showing {lbl_display}", expanded=False):
         st.markdown(
             f"""
@@ -655,8 +685,260 @@ Measures how aggressively dealers must hedge as SPY moves.
 **Short Gamma (Negative GEX)** = dealers amplify moves — drops and rips can accelerate.
 > *Right now: GEX is **{gex_b}** ({gex_sign}), meaning {gex_behav}.
 > Peak dealer support at **{peak_sup}** · peak amplification risk at **{peak_res}**.*
+
+---
+
+**Volatility Regime — IV Rank · HV30 · IV30**
+Before choosing a strategy, check whether options are currently cheap or expensive.
+- **IV Rank** (0–100%): where today's VIX sits in its 52-week range. High = options expensive; Low = options cheap.
+- **HV30** (Historical Volatility): what SPY has *actually* moved over the past 30 days, annualised.
+- **IV30** (VIX): what options are *pricing in* for the next 30 days, annualised.
+- **IV/HV Ratio > 1.1** → options overpriced vs realised moves → favour selling premium (credit spreads, iron condors).
+- **IV/HV Ratio < 0.9** → options cheap → favour buying premium (debit spreads, long straddles).
+> *Right now: {vol_txt}*
+
+**This Week's Setup — Strategy Suggester**
+Synthesises four direction signals (P/C ratio, max pain gravity, GEX regime, OI wall proximity)
+with the volatility regime to recommend a strategy type and approximate strike levels.
+
+| Direction | Vol Bias | Suggested Strategy |
+|---|---|---|
+| Neutral | Sell Premium | Iron Condor |
+| Neutral | Buy Premium | Long Straddle |
+| Bullish | Sell Premium | Bull Put Spread |
+| Bullish | Buy Premium | Bull Call Spread |
+| Bearish | Sell Premium | Bear Call Spread |
+| Bearish | Buy Premium | Bear Put Spread |
+
+Strike hints are set at 30% and 60% of the expected move from spot.
+Confidence is HIGH when 3+ signals agree, MODERATE for 2, LOW when split.
+*Not financial advice — use as a starting framework, not a trade order.*
+
+**Flow Sweeps — Volume / OI Spike Detector**
+Flags OTM strikes where today's volume is ≥ 3× the existing open interest.
+High vol/OI means someone is *opening* a large new position aggressively — the hallmark
+of an institutional sweep — rather than closing or rolling existing contracts.
+- **CALL sweeps**: bullish positioning for the selected expiry.
+- **PUT sweeps**: bearish positioning or large protective buying.
+- Ratio colour: Yellow = 10×+ · Purple = 5–10× · Grey = 3–5×.
+Data is sourced from Yahoo Finance (15-min delay). Sweeps update with the expiration selector.
             """
         )
+
+
+# ── Strategy Suggester card ────────────────────────────────────────────────────
+
+def _render_strategy_card(suggestion: dict | None, exp_label: str = "") -> None:
+    if not suggestion:
+        return
+
+    strat_clr  = suggestion["strat_color"]
+    dir_clr    = suggestion["dir_color"]
+    conf_clr   = suggestion["conf_color"]
+    vb_clr     = suggestion["vb_color"]
+    exp_note   = f" · {exp_label}" if exp_label else ""
+    em_range   = (f'${suggestion["em_low"]:,.2f} – ${suggestion["em_high"]:,.2f}'
+                  if suggestion["em_low"] and suggestion["em_high"] else "—")
+    strike_str = suggestion["strike_label"] or "—"
+
+    rationale_html = "".join(
+        f'<div style="font-size:0.77rem;color:#94A3B8;margin-bottom:3px">◆ {r}</div>'
+        for r in suggestion["rationale"]
+    )
+
+    c_main, c_why = st.columns([3, 2])
+    with c_main:
+        st.markdown(
+            f'<div style="background:rgba(255,255,255,0.03);border:1px solid #1E293B;'
+            f'border-left:4px solid {strat_clr};border-radius:10px;padding:16px 20px">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+            f'<span style="font-size:11px;font-weight:700;color:#64748B;letter-spacing:.08em;'
+            f'text-transform:uppercase">This Week\'s Setup{exp_note}</span>'
+            f'<span style="background:{conf_clr}22;color:{conf_clr};font-size:0.68rem;font-weight:700;'
+            f'padding:2px 8px;border-radius:4px;letter-spacing:.06em">'
+            f'{suggestion["confidence"]} CONFIDENCE</span>'
+            f'</div>'
+            f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+            f'<span style="font-size:28px;font-weight:900;color:{strat_clr};line-height:1">'
+            f'{suggestion["strategy"]}</span>'
+            f'<span style="background:{dir_clr}22;color:{dir_clr};font-size:0.7rem;font-weight:700;'
+            f'padding:2px 8px;border-radius:4px;letter-spacing:.05em">'
+            f'{suggestion["direction"].upper()}</span>'
+            f'<span style="background:{vb_clr}22;color:{vb_clr};font-size:0.7rem;font-weight:700;'
+            f'padding:2px 8px;border-radius:4px;letter-spacing:.05em">'
+            f'{suggestion["vol_bias"]}</span>'
+            f'</div>'
+            f'<div style="font-size:0.8rem;color:#94A3B8;margin-bottom:12px">'
+            f'{suggestion["strat_note"]}</div>'
+            f'<div style="display:flex;gap:28px;flex-wrap:wrap">'
+            f'<div><div style="font-size:9px;color:#64748B;text-transform:uppercase;'
+            f'letter-spacing:.06em;margin-bottom:2px">Strike Hints</div>'
+            f'<div style="font-size:0.82rem;font-weight:700;color:#F1F5F9">{strike_str}</div></div>'
+            f'<div><div style="font-size:9px;color:#64748B;text-transform:uppercase;'
+            f'letter-spacing:.06em;margin-bottom:2px">EM Range</div>'
+            f'<div style="font-size:0.82rem;font-weight:700;color:#A78BFA">{em_range}</div></div>'
+            f'</div>'
+            f'<div style="font-size:9px;color:#475569;margin-top:10px">'
+            f'Not financial advice · Strike hints ≈ 30%/60% of expected move</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with c_why:
+        st.markdown(
+            f'<div style="background:rgba(255,255,255,0.03);border:1px solid #1E293B;'
+            f'border-radius:10px;padding:16px">'
+            f'<div style="font-size:9px;color:#64748B;text-transform:uppercase;'
+            f'letter-spacing:.06em;margin-bottom:8px">Why this strategy</div>'
+            f'{rationale_html}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+
+# ── Volatility Regime bar ─────────────────────────────────────────────────────
+
+def _render_vol_regime_bar(vol: dict | None) -> None:
+    if not vol:
+        return
+
+    st.markdown(
+        '<div style="font-size:11px;font-weight:700;color:#64748B;letter-spacing:.08em;'
+        'text-transform:uppercase;margin-bottom:10px">'
+        'Volatility Regime — IV Rank · HV30 vs IV30 · Strategy Bias</div>',
+        unsafe_allow_html=True,
+    )
+
+    rank  = vol["iv_rank"]
+    hv30  = vol.get("hv30")
+    iv30  = vol["iv30"]
+    ratio = vol.get("iv_hv_ratio")
+
+    rank_clr  = "#22C55E" if rank >= 50 else "#F59E0B" if rank >= 30 else "#A78BFA"
+    rank_lbl  = "High IV" if rank >= 50 else "Mid IV" if rank >= 30 else "Low IV"
+    hv_clr    = "#EF4444" if hv30 and hv30 > 25 else "#F59E0B" if hv30 and hv30 > 15 else "#22C55E"
+    iv_clr    = "#EF4444" if iv30 > 25 else "#F59E0B" if iv30 > 15 else "#22C55E"
+    ratio_clr = "#22C55E" if ratio and ratio >= 1.1 else "#A78BFA" if ratio and ratio < 0.9 else "#F59E0B"
+    hv30_str  = f"{hv30:.1f}%" if hv30 else "—"
+    ratio_str = f"{ratio:.2f}×" if ratio else "—"
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.markdown(
+            f'<div style="background:rgba(255,255,255,0.03);border:1px solid #1E293B;'
+            f'border-radius:10px;padding:14px 16px;min-height:140px;box-sizing:border-box">'
+            f'<div style="font-size:10px;color:#94A3B8;font-weight:700;letter-spacing:.07em;'
+            f'text-transform:uppercase;margin-bottom:4px">IV Rank (1Y)</div>'
+            f'<div style="font-size:36px;font-weight:900;color:{rank_clr};line-height:1;margin-bottom:6px">'
+            f'{rank:.0f}<span style="font-size:16px">%</span></div>'
+            f'<div style="background:#1E293B;border-radius:3px;height:4px;margin-bottom:6px">'
+            f'<div style="width:{min(rank,100):.0f}%;height:100%;background:{rank_clr};border-radius:3px"></div></div>'
+            f'<div style="font-size:11px;font-weight:700;color:{rank_clr}">{rank_lbl}</div>'
+            f'<div style="font-size:9px;color:#64748B;margin-top:4px">'
+            f'52w: {vol["vix_52lo"]:.1f} – {vol["vix_52hi"]:.1f}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with c2:
+        st.markdown(
+            f'<div style="background:rgba(255,255,255,0.03);border:1px solid #1E293B;'
+            f'border-radius:10px;padding:14px 16px;min-height:140px;box-sizing:border-box">'
+            f'<div style="font-size:10px;color:#94A3B8;font-weight:700;letter-spacing:.07em;'
+            f'text-transform:uppercase;margin-bottom:4px">HV30 · Realized</div>'
+            f'<div style="font-size:36px;font-weight:900;color:{hv_clr};line-height:1;margin-bottom:4px">'
+            f'{hv30_str}</div>'
+            f'<div style="font-size:10px;color:#94A3B8;margin-top:10px;line-height:1.6">'
+            f'30-day annualized<br>realized volatility</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with c3:
+        st.markdown(
+            f'<div style="background:rgba(255,255,255,0.03);border:1px solid #1E293B;'
+            f'border-radius:10px;padding:14px 16px;min-height:140px;box-sizing:border-box">'
+            f'<div style="font-size:10px;color:#94A3B8;font-weight:700;letter-spacing:.07em;'
+            f'text-transform:uppercase;margin-bottom:4px">IV30 · VIX</div>'
+            f'<div style="font-size:36px;font-weight:900;color:{iv_clr};line-height:1;margin-bottom:4px">'
+            f'{iv30:.1f}<span style="font-size:16px">%</span></div>'
+            f'<div style="font-size:10px;color:#94A3B8;margin-top:10px;line-height:1.6">'
+            f'30-day implied vol<br>annualized · CBOE VIX</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with c4:
+        st.markdown(
+            f'<div style="background:rgba(255,255,255,0.03);border:1px solid #1E293B;'
+            f'border-radius:10px;padding:14px 16px;min-height:140px;box-sizing:border-box">'
+            f'<div style="font-size:10px;color:#94A3B8;font-weight:700;letter-spacing:.07em;'
+            f'text-transform:uppercase;margin-bottom:4px">IV / HV Ratio</div>'
+            f'<div style="font-size:36px;font-weight:900;color:{ratio_clr};line-height:1;margin-bottom:6px">'
+            f'{ratio_str}</div>'
+            f'<div style="display:inline-block;background:{vol["strategy_color"]}33;'
+            f'color:{vol["strategy_color"]};font-size:0.7rem;font-weight:700;'
+            f'padding:2px 8px;border-radius:4px;letter-spacing:.05em">'
+            f'{vol["strategy_bias"]}</div>'
+            f'<div style="font-size:9px;color:#64748B;margin-top:6px;line-height:1.5">'
+            f'{vol["strategy_note"]}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+
+# ── Flow Sweep panel ──────────────────────────────────────────────────────────
+
+def _render_sweep_panel(sweep_df: pd.DataFrame, exp_label: str = "", fetched_at: str = "") -> None:
+    time_note = f' <span style="font-weight:400;color:#475569;letter-spacing:0;text-transform:none">&nbsp;·&nbsp; as of {fetched_at}</span>' if fetched_at else ""
+    exp_note  = f' — {exp_label}' if exp_label else ""
+    st.markdown(
+        f'<div style="font-size:11px;font-weight:700;color:#64748B;letter-spacing:.08em;'
+        f'text-transform:uppercase;margin:20px 0 10px">'
+        f'⚡ Flow Sweeps{exp_note}{time_note}</div>',
+        unsafe_allow_html=True,
+    )
+    if sweep_df.empty:
+        st.caption("No unusual sweep activity detected for this expiration.")
+        return
+
+    # Header row
+    st.markdown(
+        '<div style="display:grid;grid-template-columns:60px 80px 80px 80px 80px 70px 70px;'
+        'gap:4px;padding:4px 10px;font-size:0.68rem;font-weight:700;color:#64748B;'
+        'letter-spacing:.07em;text-transform:uppercase;border-bottom:1px solid #1E293B;'
+        'margin-bottom:4px">'
+        '<span>Side</span><span>Strike</span><span>Vol/OI</span>'
+        '<span>Volume</span><span>OI</span><span>IV</span><span>OTM</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    for _, row in sweep_df.iterrows():
+        is_call   = row["side"] == "CALL"
+        side_clr  = "#22C55E" if is_call else "#EF4444"
+        otm_sign  = "+" if row["otm_pct"] > 0 else ""
+        iv_pct    = f'{row["iv"] * 100:.0f}%' if row["iv"] > 0 else "—"
+        ratio_clr = "#F59E0B" if row["vol_oi_ratio"] >= 10 else "#A78BFA" if row["vol_oi_ratio"] >= 5 else "#94A3B8"
+        st.markdown(
+            f'<div style="display:grid;grid-template-columns:60px 80px 80px 80px 80px 70px 70px;'
+            f'gap:4px;padding:5px 10px;font-size:0.8rem;color:#F1F5F9;'
+            f'background:rgba(255,255,255,0.02);border-radius:5px;margin-bottom:2px;'
+            f'border-left:3px solid {side_clr}">'
+            f'<span style="font-weight:700;color:{side_clr}">{row["side"]}</span>'
+            f'<span>${row["strike"]:,.0f}</span>'
+            f'<span style="font-weight:700;color:{ratio_clr}">{row["vol_oi_ratio"]:.1f}x</span>'
+            f'<span>{int(row["volume"]):,}</span>'
+            f'<span>{int(row["open_interest"]):,}</span>'
+            f'<span>{iv_pct}</span>'
+            f'<span style="color:#94A3B8">{otm_sign}{row["otm_pct"]:.1f}%</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        '<div style="font-size:0.7rem;color:#475569;margin-top:6px">'
+        'Vol/OI ≥ 3× on OTM strikes = aggressive new positioning (sweep proxy). '
+        'Yellow = 10×+ · Purple = 5-10× · Grey = 3-5×. Source: Yahoo Finance (15-min delay).'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
 
 # ── Multi-expiration OI fetch ──────────────────────────────────────────────────

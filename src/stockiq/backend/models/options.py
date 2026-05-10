@@ -220,6 +220,271 @@ def compute_expected_move(
     }
 
 
+def compute_vol_regime(
+    vix_close: pd.Series,
+    spy_close: pd.Series,
+) -> dict | None:
+    """
+    Volatility regime for options strategy selection.
+
+    IV Rank  = (VIX_now - VIX_52w_low) / (VIX_52w_high - VIX_52w_low) × 100
+    HV30     = 30-day annualized realized vol from SPY log returns
+    IV30     = VIX (IS the 30-day annualized implied vol for S&P 500)
+    IV/HV    = ratio > 1 means options price in more vol than SPY is delivering → sell premium
+    """
+    if vix_close.empty or len(vix_close) < 10:
+        return None
+
+    vix_now  = float(vix_close.iloc[-1])
+    vix_52hi = float(vix_close.max())
+    vix_52lo = float(vix_close.min())
+    iv_rank  = (
+        (vix_now - vix_52lo) / (vix_52hi - vix_52lo) * 100
+        if vix_52hi > vix_52lo else 50.0
+    )
+
+    hv30 = None
+    if len(spy_close) >= 31:
+        log_rets = np.log(spy_close / spy_close.shift(1)).dropna()
+        hv30 = float(log_rets.iloc[-30:].std() * np.sqrt(252) * 100)
+
+    iv30       = vix_now
+    iv_hv_ratio = iv30 / hv30 if hv30 and hv30 > 0 else None
+
+    if iv_rank >= 50 and (iv_hv_ratio is None or iv_hv_ratio >= 1.1):
+        bias, color = "SELL PREMIUM", "#22C55E"
+        note = "Options overpriced vs realized moves — favor credit spreads, iron condors"
+    elif iv_rank <= 30 or (iv_hv_ratio is not None and iv_hv_ratio < 0.9):
+        bias, color = "BUY PREMIUM", "#A78BFA"
+        note = "Options cheap vs realized moves — favor debit spreads, long straddles"
+    else:
+        bias, color = "NEUTRAL", "#F59E0B"
+        note = "Mixed signals — smaller size, wait for cleaner setup"
+
+    return {
+        "iv_rank":        round(iv_rank, 1),
+        "hv30":           round(hv30, 1) if hv30 else None,
+        "iv30":           round(iv30, 1),
+        "iv_hv_ratio":    round(iv_hv_ratio, 2) if iv_hv_ratio else None,
+        "vix_52hi":       round(vix_52hi, 2),
+        "vix_52lo":       round(vix_52lo, 2),
+        "strategy_bias":  bias,
+        "strategy_color": color,
+        "strategy_note":  note,
+    }
+
+
+def compute_strategy_suggestion(
+    current_price: float,
+    em: dict | None,
+    pc: dict | None,
+    gex_df: pd.DataFrame,
+    oi_df: pd.DataFrame,
+    max_pain: float,
+    vol: dict | None,
+) -> dict | None:
+    """
+    Synthesize options chain signals into a weekly strategy recommendation.
+
+    Direction bias from: P/C ratio, max pain gravity, total GEX regime, OI wall proximity.
+    Strategy type from: direction × vol regime (sell/buy premium).
+    Strike hints from: expected move (30% / 60% of EM as short / long legs).
+    """
+    if not current_price:
+        return None
+
+    # ── Direction scoring ──────────────────────────────────────────────────────
+    direction_votes: list[str] = []
+    rationale: list[str] = []
+
+    if pc:
+        r = pc["ratio"]
+        if r < 0.8:
+            direction_votes.append("bullish")
+            rationale.append(f"P/C {r:.2f} — call-heavy flow, market leans bullish")
+        elif r > 1.2:
+            direction_votes.append("bearish")
+            rationale.append(f"P/C {r:.2f} — put-heavy flow, market leans bearish")
+        else:
+            direction_votes.append("neutral")
+            rationale.append(f"P/C {r:.2f} — balanced flow, no directional edge")
+
+    if max_pain and current_price:
+        dist = (max_pain - current_price) / current_price * 100
+        if dist > 0.5:
+            direction_votes.append("bullish")
+            rationale.append(f"Max pain ${max_pain:,.0f} is {abs(dist):.1f}% above spot — gravitational pull upward")
+        elif dist < -0.5:
+            direction_votes.append("bearish")
+            rationale.append(f"Max pain ${max_pain:,.0f} is {abs(dist):.1f}% below spot — gravitational pull downward")
+        else:
+            direction_votes.append("neutral")
+            rationale.append(f"Max pain ${max_pain:,.0f} near spot — no clear directional pull")
+
+    if not gex_df.empty:
+        total_gex = float(gex_df["gex"].sum())
+        if total_gex >= 0:
+            direction_votes.append("neutral")
+            rationale.append("Positive GEX — dealers stabilise price, rangebound conditions favoured")
+        else:
+            near = gex_df[
+                (gex_df["strike"] >= current_price * 0.99) &
+                (gex_df["strike"] <= current_price * 1.01)
+            ]
+            near_gex = float(near["gex"].sum()) if not near.empty else 0.0
+            if near_gex < -1e7:
+                direction_votes.append("bearish")
+                rationale.append("Negative near-ATM GEX — dealer hedging amplifies downside moves")
+            else:
+                direction_votes.append("neutral")
+                rationale.append("Negative GEX regime — amplified moves but direction unclear")
+
+    if not oi_df.empty:
+        call_wall  = float(oi_df.loc[oi_df["call_oi"].idxmax(), "strike"])
+        put_wall   = float(oi_df.loc[oi_df["put_oi"].idxmax(),  "strike"])
+        dist_call  = (call_wall - current_price) / current_price * 100
+        dist_put   = (put_wall  - current_price) / current_price * 100
+        if dist_put < 0 and abs(dist_put) < 1.5:
+            direction_votes.append("bullish")
+            rationale.append(f"Put wall ${put_wall:,.0f} ({abs(dist_put):.1f}% below) — strong nearby floor")
+        elif dist_call > 0 and dist_call < 1.5:
+            direction_votes.append("bearish")
+            rationale.append(f"Call wall ${call_wall:,.0f} (+{dist_call:.1f}% above) — ceiling nearby, resistance likely")
+
+    bull_n = direction_votes.count("bullish")
+    bear_n = direction_votes.count("bearish")
+    neu_n  = direction_votes.count("neutral")
+
+    if bull_n > bear_n and bull_n > neu_n:
+        direction, dir_color = "Bullish", "#22C55E"
+    elif bear_n > bull_n and bear_n > neu_n:
+        direction, dir_color = "Bearish", "#EF4444"
+    else:
+        direction, dir_color = "Neutral", "#F59E0B"
+
+    max_agree  = max(bull_n, bear_n, neu_n)
+    total_v    = len(direction_votes)
+    confidence = "HIGH" if max_agree >= 3 else "MODERATE" if max_agree >= 2 else "LOW"
+    conf_color = "#22C55E" if confidence == "HIGH" else "#F59E0B" if confidence == "MODERATE" else "#EF4444"
+
+    # ── Strategy selection ─────────────────────────────────────────────────────
+    vol_bias = vol["strategy_bias"] if vol else "NEUTRAL"
+    vb_color = vol["strategy_color"] if vol else "#F59E0B"
+
+    if direction == "Neutral":
+        if vol_bias == "SELL PREMIUM":
+            strategy, strat_color = "Iron Condor", "#22C55E"
+            strat_note = "Range-bound + high IV — sell credit on both sides within the EM range"
+        elif vol_bias == "BUY PREMIUM":
+            strategy, strat_color = "Long Straddle", "#A78BFA"
+            strat_note = "Range-bound direction but cheap IV — buy ATM straddle for a breakout"
+        else:
+            strategy, strat_color = "Iron Condor", "#F59E0B"
+            strat_note = "Neutral setup — iron condor with reduced size, mixed vol signals"
+    elif direction == "Bullish":
+        if vol_bias in ("SELL PREMIUM", "NEUTRAL"):
+            strategy, strat_color = "Bull Put Spread", "#22C55E"
+            strat_note = "Bullish + high IV — sell put spread below the market, collect premium"
+        else:
+            strategy, strat_color = "Bull Call Spread", "#22C55E"
+            strat_note = "Bullish + cheap IV — buy call debit spread above the market"
+    else:
+        if vol_bias in ("SELL PREMIUM", "NEUTRAL"):
+            strategy, strat_color = "Bear Call Spread", "#EF4444"
+            strat_note = "Bearish + high IV — sell call spread above the market, collect premium"
+        else:
+            strategy, strat_color = "Bear Put Spread", "#EF4444"
+            strat_note = "Bearish + cheap IV — buy put debit spread below the market"
+
+    # ── Strike hints from expected move ───────────────────────────────────────
+    strike_label = ""
+    if em:
+        move = em["move"]
+        if strategy == "Bull Put Spread":
+            strike_label = (f"Short ${current_price - move * 0.3:,.0f} "
+                            f"· Long ${current_price - move * 0.6:,.0f}")
+        elif strategy == "Bear Call Spread":
+            strike_label = (f"Short ${current_price + move * 0.3:,.0f} "
+                            f"· Long ${current_price + move * 0.6:,.0f}")
+        elif strategy == "Iron Condor":
+            strike_label = (f"Puts ${current_price - move * 0.6:,.0f}"
+                            f"/{current_price - move * 0.3:,.0f} "
+                            f"· Calls ${current_price + move * 0.3:,.0f}"
+                            f"/{current_price + move * 0.6:,.0f}")
+        elif strategy == "Bull Call Spread":
+            strike_label = (f"Long ${current_price + move * 0.1:,.0f} "
+                            f"· Short ${current_price + move * 0.4:,.0f}")
+        elif strategy == "Bear Put Spread":
+            strike_label = (f"Long ${current_price - move * 0.1:,.0f} "
+                            f"· Short ${current_price - move * 0.4:,.0f}")
+        elif strategy == "Long Straddle":
+            strike_label = f"ATM ${current_price:,.0f} (call + put)"
+
+    return {
+        "strategy":    strategy,
+        "strat_color": strat_color,
+        "strat_note":  strat_note,
+        "direction":   direction,
+        "dir_color":   dir_color,
+        "confidence":  confidence,
+        "conf_color":  conf_color,
+        "vol_bias":    vol_bias,
+        "vb_color":    vb_color,
+        "strike_label": strike_label,
+        "em_low":       em["low"]  if em else None,
+        "em_high":      em["high"] if em else None,
+        "rationale":    rationale[:4],
+    }
+
+
+def compute_sweep_signals(
+    calls: pd.DataFrame,
+    puts: pd.DataFrame,
+    current_price: float,
+    vol_oi_threshold: float = 3.0,
+    min_volume: int = 100,
+    top_n: int = 8,
+) -> pd.DataFrame:
+    """
+    Sweep proxy: flags OTM strikes where volume >> open interest.
+    High vol/OI ratio means aggressive new positioning, not hedging —
+    the hallmark of an institutional sweep.
+
+    Returns columns: side, strike, volume, open_interest, vol_oi_ratio, iv, otm_pct
+    sorted by vol_oi_ratio descending.
+    """
+    rows = []
+    for df, side, otm_fn in [
+        (calls, "CALL", lambda k: k > current_price),
+        (puts,  "PUT",  lambda k: k < current_price),
+    ]:
+        if df.empty or "volume" not in df.columns or "openInterest" not in df.columns:
+            continue
+        d = df[otm_fn(df["strike"])].copy()
+        d = d[(d["volume"] >= min_volume) & (d["openInterest"] > 0)]
+        if d.empty:
+            continue
+        d["vol_oi_ratio"] = d["volume"] / d["openInterest"]
+        d = d[d["vol_oi_ratio"] >= vol_oi_threshold]
+        if d.empty:
+            continue
+        d["side"]    = side
+        d["otm_pct"] = (d["strike"] - current_price) / current_price * 100
+        d["iv"]      = d["impliedVolatility"].fillna(0) if "impliedVolatility" in d.columns else 0.0
+        rows.append(d[["side", "strike", "volume", "openInterest", "vol_oi_ratio", "iv", "otm_pct"]])
+
+    if not rows:
+        return pd.DataFrame()
+
+    return (
+        pd.concat(rows, ignore_index=True)
+        .rename(columns={"openInterest": "open_interest"})
+        .sort_values("vol_oi_ratio", ascending=False)
+        .head(top_n)
+        .reset_index(drop=True)
+    )
+
+
 def label_expirations(expirations: list[str], today: datetime | None = None) -> list[str]:
     """
     Convert ISO expiration strings to human-readable labels with days-to-expiry.

@@ -13,13 +13,14 @@ from stockiq.backend.data.spy import (
     fetch_spy_options_data,
     fetch_spy_options_data_cboe,
 )
+from stockiq.backend.data.market import fetch_vix_ohlc
 from stockiq.backend.data.local_gap_cache import apply_gap_cache, save_confirmed_gaps
 from stockiq.backend.data.local_ohlc_cache import enrich_with_cache
 from stockiq.backend.data.yf_fetch import fetch_ohlcv
 from stockiq.backend.models.indicators import compute_daily_gaps, compute_rsi, patch_today_gap
 from stockiq.backend.models.options import (
     compute_max_pain, compute_oi_by_strike, label_expirations,
-    compute_gex, compute_expected_move,
+    compute_gex, compute_expected_move, compute_sweep_signals, compute_vol_regime,
 )
 
 _QUOTE_FETCHERS = {
@@ -181,6 +182,20 @@ def get_rsi_top_analysis() -> dict:
         return {}
 
 
+def get_vol_regime() -> dict | None:
+    """IV Rank, HV30, IV30 (VIX) and strategy bias for options premium selection."""
+    try:
+        vix_df = fetch_vix_ohlc(period="1y")
+        spy_df = fetch_spx_intraday(period="1y", interval="1d")
+        if vix_df.empty or spy_df.empty:
+            return None
+        vix_close = vix_df["Close"].dropna()
+        spy_close = spy_df["Close"].dropna() if "Close" in spy_df.columns else pd.Series(dtype=float)
+        return compute_vol_regime(vix_close, spy_close)
+    except Exception:
+        return None
+
+
 def get_spy_options_analysis(
     expiration: str = "",
     current_price: float = 0.0,
@@ -219,14 +234,20 @@ def get_spy_options_analysis(
     gex_df        = compute_gex(data["calls"], data["puts"], current_price or max_pain, data["expiration"])
     expected_move = compute_expected_move(data["calls"], data["puts"], current_price or max_pain, data["expiration"])
 
+    # Yahoo chain carries volume data; use it for sweeps and bid/ask
+    raw_calls = _yahoo_chain_for_bid_ask(data["expiration"], "calls")
+    raw_puts  = _yahoo_chain_for_bid_ask(data["expiration"], "puts")
+    sweep_df  = compute_sweep_signals(raw_calls, raw_puts, current_price or max_pain)
+
     return {
         "max_pain":      max_pain,
         "oi_df":         oi_df,
         "gex_df":        gex_df,
         "expected_move": expected_move,
+        "sweep_signals": sweep_df,
         "expiration":    data["expiration"],
         "expirations":   data["expirations"],
         "exp_labels":    label_expirations(data["expirations"]),
-        "raw_calls":     _yahoo_chain_for_bid_ask(data["expiration"], "calls"),
-        "raw_puts":      _yahoo_chain_for_bid_ask(data["expiration"], "puts"),
+        "raw_calls":     raw_calls,
+        "raw_puts":      raw_puts,
     }
