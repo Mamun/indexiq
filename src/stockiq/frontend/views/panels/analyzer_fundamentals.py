@@ -30,7 +30,6 @@ def _render_fundamentals_table(fund: dict) -> None:
 
     fpe_sub, fpe_clr = "", None
     if fpe and med:
-        diff = fpe - med
         fpe_sub = f"sector avg {med:.1f}"
         fpe_clr = UP if fpe < med else DN if fpe > med * 1.15 else None
 

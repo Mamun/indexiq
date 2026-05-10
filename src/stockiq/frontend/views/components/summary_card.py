@@ -177,11 +177,16 @@ def render_spy_summary_card(
     tech_rows: list[tuple] = []
 
     if rsi is not None:
-        if rsi < 30:    rc, rs = _UP,       "Oversold"
-        elif rsi < 45:  rc, rs = "#86EFAC", "Weak"
-        elif rsi < 55:  rc, rs = _MUT,      "Neutral"
-        elif rsi < 70:  rc, rs = "#FCD34D", "Strong"
-        else:           rc, rs = _DN,       "Overbought"
+        if rsi < 30:
+            rc, rs = _UP, "Oversold"
+        elif rsi < 45:
+            rc, rs = "#86EFAC", "Weak"
+        elif rsi < 55:
+            rc, rs = _MUT, "Neutral"
+        elif rsi < 70:
+            rc, rs = "#FCD34D", "Strong"
+        else:
+            rc, rs = _DN, "Overbought"
         tech_rows.append(("RSI (14d)", f"{rsi:.1f}", rs, rc))
 
     if vix_snapshot:

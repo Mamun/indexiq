@@ -363,7 +363,6 @@ def compute_strategy_suggestion(
         direction, dir_color = "Neutral", "#F59E0B"
 
     max_agree  = max(bull_n, bear_n, neu_n)
-    total_v    = len(direction_votes)
     confidence = "HIGH" if max_agree >= 3 else "MODERATE" if max_agree >= 2 else "LOW"
     conf_color = "#22C55E" if confidence == "HIGH" else "#F59E0B" if confidence == "MODERATE" else "#EF4444"
 

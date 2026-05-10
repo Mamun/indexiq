@@ -105,7 +105,7 @@ def _confluence_card(c: dict) -> str:
     filled   = c["core_count"]
     unfilled = 3 - filled
     bar      = (
-        f'<div style="display:flex;gap:3px;margin-top:8px">'
+        '<div style="display:flex;gap:3px;margin-top:8px">'
         + f'<div style="flex:{filled};height:4px;background:{c["color"]};border-radius:2px"></div>' * (1 if filled else 0)
         + f'<div style="flex:{unfilled};height:4px;background:#1E293B;border-radius:2px"></div>' * (1 if unfilled else 0)
         + '</div>'
