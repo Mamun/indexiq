@@ -61,7 +61,7 @@ def render_strong_buy_tab() -> None:
         "Max results",
         min_value=5, max_value=30, value=_url_top, step=5,
     )
-    scan_btn = c5.button("🔍 Scan", width="stretch", type="primary")
+    scan_btn = c5.button("🔍 Scan", use_container_width=True, type="primary")
 
     st.markdown("---")
 
@@ -130,7 +130,7 @@ def render_strong_buy_tab() -> None:
     ]
     st.dataframe(
         _style_table(df[display_cols]),
-        width="stretch", hide_index=True,
+        use_container_width=True, hide_index=True,
         height=(len(df) + 1) * 35 + 4,
     )
 
@@ -140,18 +140,18 @@ def render_strong_buy_tab() -> None:
     with col1:
         st.markdown("#### Price Target Upside %")
         st.caption("Mean analyst price target vs current price")
-        st.plotly_chart(analyst_upside_bar(df), width="stretch")
+        st.plotly_chart(analyst_upside_bar(df), use_container_width=True)
 
     with col2:
         st.markdown("#### Rating vs Upside — bubble = analyst count")
-        st.plotly_chart(analyst_buy_scatter(df), width="stretch")
+        st.plotly_chart(analyst_buy_scatter(df), use_container_width=True)
 
     # ── Sector breakdown ──────────────────────────────────────────────────────
     st.markdown("---")
     st.markdown("#### Sector Distribution")
     st.plotly_chart(
         analyst_sector_bar(df, "SB Score", "Upside %", "upside", "#3B82F6", "Avg Strong Buy Score"),
-        width="stretch",
+        use_container_width=True,
     )
 
 

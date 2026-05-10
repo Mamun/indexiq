@@ -122,7 +122,7 @@ def _render_vix_chart_section(vix: dict) -> None:
 
     vix_chart_df = get_vix_chart_df(period=yf_period)
     if not vix_chart_df.empty and "VIX" in vix_chart_df.columns:
-        st.plotly_chart(vix_spy_chart(vix_chart_df), width="stretch")
+        st.plotly_chart(vix_spy_chart(vix_chart_df), use_container_width=True)
 
     vix_gaps = get_vix_gap_history(period=yf_period)
     if not vix_gaps.empty:

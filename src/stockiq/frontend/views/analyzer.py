@@ -47,8 +47,8 @@ def render_analyzer_tab() -> None:
         "Ticker Symbol", value=st.session_state.ticker_val, max_chars=10,
         placeholder="Ticker, e.g. MSFT",
     ).upper().strip()
-    search_clicked = col_srch.button("Search", width="stretch")
-    analyze_btn = col_analyze.button("Analyze", width="stretch", type="primary")
+    search_clicked = col_srch.button("Search", use_container_width=True)
+    analyze_btn = col_analyze.button("Analyze", use_container_width=True, type="primary")
 
     if search_clicked:
         if search_query.strip():

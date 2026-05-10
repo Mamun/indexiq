@@ -37,7 +37,7 @@ def render_etf_scanner_tab() -> None:
         index=0,
     )
 
-    scan_btn = c3.button("🔍 Scan", type="primary", width="stretch")
+    scan_btn = c3.button("🔍 Scan", type="primary", use_container_width=True)
 
     st.markdown("---")
 
@@ -104,7 +104,7 @@ def render_etf_scanner_tab() -> None:
     ]
     st.dataframe(
         _style_table(df[display_cols]),
-        width="stretch",
+        use_container_width=True,
         hide_index=True,
         height=(len(df) + 1) * 35 + 4,
     )
@@ -114,14 +114,14 @@ def render_etf_scanner_tab() -> None:
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("#### 1M Return by ETF")
-        st.plotly_chart(etf_return_bar(df, "1M %", "1M Return %"), width="stretch")
+        st.plotly_chart(etf_return_bar(df, "1M %", "1M Return %"), use_container_width=True)
     with col2:
         st.markdown("#### ETF Score Ranking")
-        st.plotly_chart(etf_score_bar(df), width="stretch")
+        st.plotly_chart(etf_score_bar(df), use_container_width=True)
 
     st.markdown("---")
     st.markdown("#### Category Heatmap — Avg 1M Return")
-    st.plotly_chart(etf_category_heatmap(df), width="stretch")
+    st.plotly_chart(etf_category_heatmap(df), use_container_width=True)
 
 
 # ── Private helpers ────────────────────────────────────────────────────────────

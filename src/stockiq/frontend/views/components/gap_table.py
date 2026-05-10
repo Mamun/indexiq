@@ -162,4 +162,4 @@ def render_gap_table(
     if show_next_day and "Next Day" in display_cols:
         styled = styled.map(_color_next_day, subset=["Next Day"])
 
-    st.dataframe(styled, width="stretch", hide_index=True, height=(len(display) + 1) * 35 + 4)
+    st.dataframe(styled, use_container_width=True, hide_index=True, height=(len(display) + 1) * 35 + 4)

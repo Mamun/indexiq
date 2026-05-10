@@ -122,7 +122,7 @@ historically one of the strongest value signals. PEG < 1 = +20 pts bonus.
         "Max results",
         min_value=5, max_value=50, value=_url_top, step=5,
     )
-    scan_btn = c4.button("🔍 Scan", width="stretch", type="primary")
+    scan_btn = c4.button("🔍 Scan", use_container_width=True, type="primary")
 
     st.markdown("---")
 
@@ -198,7 +198,7 @@ historically one of the strongest value signals. PEG < 1 = +20 pts bonus.
     ]
     st.dataframe(
         _style_table(df[display_cols]),
-        width="stretch", hide_index=True,
+        use_container_width=True, hide_index=True,
         height=(len(df) + 1) * 35 + 4,
     )
 
@@ -208,16 +208,16 @@ historically one of the strongest value signals. PEG < 1 = +20 pts bonus.
     with col1:
         st.markdown("#### Forward P/E vs Sector Median")
         st.caption("Bar = stock P/E · Line = sector median · Lower bar = cheaper")
-        st.plotly_chart(forward_pe_bar(df), width="stretch")
+        st.plotly_chart(forward_pe_bar(df), use_container_width=True)
 
     with col2:
         st.markdown("#### Forward P/E vs EPS Growth")
         st.caption("Bottom-right quadrant = cheap + fast-growing (ideal)")
-        st.plotly_chart(forward_pe_scatter(df), width="stretch")
+        st.plotly_chart(forward_pe_scatter(df), use_container_width=True)
 
     st.markdown("---")
     st.markdown("#### Sector Distribution")
-    st.plotly_chart(forward_pe_sector_bar(df), width="stretch")
+    st.plotly_chart(forward_pe_sector_bar(df), use_container_width=True)
 
 
 # ── Private helpers ────────────────────────────────────────────────────────────

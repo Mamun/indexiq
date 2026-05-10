@@ -330,7 +330,7 @@ def render_ai_forecast(gaps_df: pd.DataFrame, quote: dict, show_share_btn: bool 
             .map(_color_change,    subset=["Change", "Change %"])
             .format(fmt),
         hide_index=True,
-        width="stretch",
+        use_container_width=True,
         height=(len(pred_df) + 1) * 35 + 4,
     )
 

@@ -23,7 +23,7 @@ def render_bounce_radar_tab() -> None:
         "Max results to show",
         min_value=10, max_value=50, value=50, step=5,
     )
-    scan_btn = c3.button("🔍 Scan", width="stretch", type="primary")
+    scan_btn = c3.button("🔍 Scan", use_container_width=True, type="primary")
 
     st.markdown("---")
 
@@ -57,11 +57,11 @@ def render_bounce_radar_tab() -> None:
     st.caption(
         "**Bounce Score** = proximity to MA200 + RSI oversold bonus + below-MA200 support bonus"
     )
-    st.dataframe(_style_table(df), width="stretch", hide_index=True, height=(len(df) + 1) * 35 + 4)
+    st.dataframe(_style_table(df), use_container_width=True, hide_index=True, height=(len(df) + 1) * 35 + 4)
 
     # ── RSI bar chart ─────────────────────────────────────────────────────────
     st.markdown("#### RSI Distribution")
-    st.plotly_chart(rsi_bar(df), width="stretch")
+    st.plotly_chart(rsi_bar(df), use_container_width=True)
 
 
 # ── Private helpers ────────────────────────────────────────────────────────────

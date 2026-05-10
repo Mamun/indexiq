@@ -103,7 +103,7 @@ def render_options_intelligence(current_price: float) -> None:
         if not oi_df.empty or not gex_df.empty:
             st.plotly_chart(
                 oi_gex_combined_chart(oi_df, gex_df, current_price, max_pain),
-                width="stretch",
+                use_container_width=True,
             )
         else:
             st.caption("No options data for this expiration.")
@@ -119,7 +119,7 @@ def render_options_intelligence(current_price: float) -> None:
             seed["expirations"], seed["exp_labels"], current_price
         )
     if not call_pivot.empty:
-        st.plotly_chart(oi_heatmap_chart(call_pivot, put_pivot, current_price), width="stretch")
+        st.plotly_chart(oi_heatmap_chart(call_pivot, put_pivot, current_price), use_container_width=True)
     else:
         st.caption("Heatmap data unavailable.")
 

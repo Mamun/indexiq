@@ -36,7 +36,7 @@ def render_candle_momentum_screener_tab() -> None:
     )
     st.markdown("---")
 
-    if not st.button("🔄 Run Screener", width="stretch", type="primary"):
+    if not st.button("🔄 Run Screener", use_container_width=True, type="primary"):
         _render_legend()
         return
 
@@ -75,7 +75,7 @@ def render_candle_momentum_screener_tab() -> None:
     st.markdown("---")
     st.markdown("#### Sector Momentum Overview")
     st.caption("Stacked signal distribution per sector — more green = stronger sector momentum")
-    st.plotly_chart(candle_momentum_sector_chart(df), width="stretch")
+    st.plotly_chart(candle_momentum_sector_chart(df), use_container_width=True)
 
 
 # ── Private helpers ────────────────────────────────────────────────────────────
@@ -99,7 +99,7 @@ def _render_signal_sections(df) -> None:
         cols = [c for c in display_cols if c in tier_df.columns]
         st.dataframe(
             _style_table(tier_df[cols]),
-            width="stretch", hide_index=True,
+            use_container_width=True, hide_index=True,
             height=(len(tier_df) + 1) * 35 + 4,
         )
 

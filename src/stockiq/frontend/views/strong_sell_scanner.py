@@ -67,7 +67,7 @@ def render_strong_sell_tab() -> None:
         "Max results",
         min_value=5, max_value=30, value=_url_top, step=5,
     )
-    scan_btn = c5.button("🔍 Scan", width="stretch", type="primary")
+    scan_btn = c5.button("🔍 Scan", use_container_width=True, type="primary")
 
     st.markdown("---")
 
@@ -150,7 +150,7 @@ def render_strong_sell_tab() -> None:
     ]
     st.dataframe(
         _style_table(df[display_cols]),
-        width="stretch", hide_index=True,
+        use_container_width=True, hide_index=True,
         height=(len(df) + 1) * 35 + 4,
     )
 
@@ -160,18 +160,18 @@ def render_strong_sell_tab() -> None:
     with col1:
         st.markdown("#### Price Target Downside %")
         st.caption("Mean analyst price target vs current price")
-        st.plotly_chart(analyst_downside_bar(df), width="stretch")
+        st.plotly_chart(analyst_downside_bar(df), use_container_width=True)
 
     with col2:
         st.markdown("#### Rating vs Downside — bubble = analyst count")
-        st.plotly_chart(analyst_sell_scatter(df), width="stretch")
+        st.plotly_chart(analyst_sell_scatter(df), use_container_width=True)
 
     # ── Sector breakdown ──────────────────────────────────────────────────────
     st.markdown("---")
     st.markdown("#### Sector Distribution")
     st.plotly_chart(
         analyst_sector_bar(df, "SS Score", "Downside %", "downside", DN, "Avg Strong Sell Score"),
-        width="stretch",
+        use_container_width=True,
     )
 
 

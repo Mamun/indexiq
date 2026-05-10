@@ -47,7 +47,7 @@ def render_munger_tab() -> None:
         "Max results",
         min_value=10, max_value=50, value=_url_top, step=5,
     )
-    scan_btn = c4.button("🔍 Scan", width="stretch", type="primary")
+    scan_btn = c4.button("🔍 Scan", use_container_width=True, type="primary")
 
     st.markdown("---")
 
@@ -122,18 +122,18 @@ def render_munger_tab() -> None:
         "Ticker", "Company", "Sector", "Price", "MA 200W",
         "Distance %", "RSI", "Quality Score", "Prox Score", "Munger Score",
     ]
-    st.dataframe(_style_table(df[display_cols]), width="stretch", hide_index=True, height=(len(df) + 1) * 35 + 4)
+    st.dataframe(_style_table(df[display_cols]), use_container_width=True, hide_index=True, height=(len(df) + 1) * 35 + 4)
 
     with st.expander("🔬 Fundamental breakdown per stock", expanded=False):
         bd_df = df[["Ticker", "Company", "Quality Score", "Breakdown"]].copy()
-        st.dataframe(bd_df, width="stretch", hide_index=True, height=(len(bd_df) + 1) * 35 + 4)
+        st.dataframe(bd_df, use_container_width=True, hide_index=True, height=(len(bd_df) + 1) * 35 + 4)
 
     # ── Charts ────────────────────────────────────────────────────────────────
     st.markdown("#### Distance from MA 200W vs Quality Score — bubble size = Munger Score")
-    st.plotly_chart(munger_scatter(df), width="stretch")
+    st.plotly_chart(munger_scatter(df), use_container_width=True)
 
     st.markdown("#### Quality Score by Company")
-    st.plotly_chart(quality_bar(df), width="stretch")
+    st.plotly_chart(quality_bar(df), use_container_width=True)
 
 
 # ── Private helpers ────────────────────────────────────────────────────────────
