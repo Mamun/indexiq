@@ -189,10 +189,14 @@ def compute_ma_stretch(df: pd.DataFrame) -> dict:
     }
 
 
+_SECTOR_ETFS = ["XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLB", "XLU", "XLRE", "XLC"]
+
+
 def check_breadth_divergence(daily_df: pd.DataFrame) -> dict:
     """
-    Breadth divergence: SPX RSI is high while % of stocks above 50 MA is declining.
-    Uses ^SPXA50R (S&P 500 % above 50-day MA) as the breadth proxy.
+    Breadth divergence: SPX RSI is high while sector breadth is declining.
+    Computes % of 11 SPDR sector ETFs above their 50-day MA as the breadth proxy.
+    (^SPXA50R / ^SPXA200R were removed from Yahoo Finance.)
     """
     import yfinance as yf
 
@@ -200,27 +204,26 @@ def check_breadth_divergence(daily_df: pd.DataFrame) -> dict:
     current_rsi = float(rsi_series.dropna().iloc[-1])
 
     try:
-        breadth_df = yf.download(
-            "^SPXA50R", period="60d", interval="1d",
+        raw = yf.download(
+            _SECTOR_ETFS, period="6mo", interval="1d",
             progress=False, auto_adjust=True,
         )
-        if breadth_df.empty:
+        if raw.empty:
             return {"available": False, "spx_rsi": round(current_rsi, 1)}
 
-        # Handle potential MultiIndex from newer yfinance versions
-        if isinstance(breadth_df.columns, pd.MultiIndex):
-            breadth_df.columns = breadth_df.columns.get_level_values(0)
+        close = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw
+        close = close.dropna(how="all")
 
-        if "Close" not in breadth_df.columns:
+        ma50      = close.rolling(50).mean()
+        breadth   = (close > ma50).mean(axis=1) * 100   # % of sectors above 50-day MA
+        breadth   = breadth.dropna()
+
+        if len(breadth) < 10:
             return {"available": False, "spx_rsi": round(current_rsi, 1)}
 
-        breadth_close = breadth_df["Close"].dropna()
-        if len(breadth_close) < 10:
-            return {"available": False, "spx_rsi": round(current_rsi, 1)}
-
-        current_breadth = float(breadth_close.iloc[-1])
-        trend_10d = float(breadth_close.iloc[-1] - breadth_close.iloc[-10])
-        declining = trend_10d < -5
+        current_breadth = float(breadth.iloc[-1])
+        trend_10d       = float(breadth.iloc[-1] - breadth.iloc[-10])
+        declining       = trend_10d < -5
 
         return {
             "available":         True,

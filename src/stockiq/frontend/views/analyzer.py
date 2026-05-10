@@ -37,14 +37,21 @@ def render_analyzer_tab() -> None:
     if url_ticker and st.session_state.ticker_val != url_ticker:
         st.session_state.ticker_val = url_ticker
 
-    # ── Company search ────────────────────────────────────────────────────────
-    col_q, col_btn = st.columns([5, 1])
+    # ── Search + Ticker + Actions (single row) ───────────────────────────────
+    col_q, col_t, col_srch, col_analyze = st.columns([3, 2, 1, 1], vertical_alignment="bottom")
     search_query = col_q.text_input(
         "company_search",
-        placeholder="Search by company name, e.g. Microsoft, Apple, Tesla…",
+        placeholder="Company name, e.g. Microsoft…",
         label_visibility="collapsed",
     )
-    if col_btn.button("Search", width="stretch"):
+    ticker = col_t.text_input(
+        "Ticker Symbol", value=st.session_state.ticker_val, max_chars=10,
+        placeholder="Ticker, e.g. MSFT",
+    ).upper().strip()
+    search_clicked = col_srch.button("Search", width="stretch")
+    analyze_btn = col_analyze.button("Analyze", width="stretch", type="primary")
+
+    if search_clicked:
         if search_query.strip():
             with st.spinner("Searching…"):
                 st.session_state.search_results = search_stocks(search_query.strip())
@@ -60,17 +67,10 @@ def render_analyzer_tab() -> None:
             "Select a company", range(len(labels)), format_func=lambda i: labels[i]
         )
         st.session_state.ticker_val = st.session_state.search_results[choice_idx]["symbol"]
+        ticker = st.session_state.ticker_val
     elif search_query and not st.session_state.search_results:
         st.caption("No matches found — try a different name.")
 
-    st.markdown("---")
-
-    # ── Ticker input + Analyze ────────────────────────────────────────────────
-    col_ticker, col_btn2 = st.columns([5, 1], vertical_alignment="bottom")
-    ticker = col_ticker.text_input(
-        "Ticker Symbol", value=st.session_state.ticker_val, max_chars=10,
-    ).upper().strip()
-    analyze_btn = col_btn2.button("Analyze", width="stretch", type="primary")
     auto_analyze = bool(url_ticker) and url_ticker != st.session_state.get("analyzer_ticker")
 
     if not (analyze_btn or auto_analyze or ticker):
@@ -130,7 +130,7 @@ def render_analyzer_tab() -> None:
     )
 
     # ── Section 1: Header ────────────────────────────────────────────────────
-    h_name, h_price, h_signal = st.columns([3, 3, 1])
+    h_name, h_price, h_signal = st.columns([4, 2, 2])
     with h_name:
         st.markdown(
             f'<div style="padding-top:6px">'
@@ -231,52 +231,16 @@ def render_analyzer_tab() -> None:
     st.plotly_chart(fig, width="stretch")
     st.markdown("---")
 
-    # ── Section 5: Signals + BX ───────────────────────────────────────────────
-    sig_col, bx_col = st.columns([3, 2])
+    # ── Section 5+6: Signals + BX + Key Levels ───────────────────────────────
+    sig_col, bx_col, lvl_col = st.columns([3, 2, 2])
     with sig_col:
         render_signal_analysis(sig)
     with bx_col:
         render_buying_pressure(df)
+    with lvl_col:
+        _render_key_levels(latest, fib, price)
 
     st.markdown("---")
-
-    # ── Section 6: Key price levels ───────────────────────────────────────────
-    with st.expander("Key Price Levels", expanded=False):
-        ma_col, fib_col = st.columns(2)
-
-        with ma_col:
-            st.markdown("**Moving Averages**")
-            for name, key in [("MA 5", "MA5"), ("MA 20", "MA20"), ("MA 50", "MA50"),
-                               ("MA 100", "MA100"), ("MA 200", "MA200"), ("MA 200W", "MA200W")]:
-                val = float(latest.get(key, 0) or 0)
-                if val:
-                    diff = (price - val) / val * 100
-                    clr  = UP if diff >= 0 else DN
-                    st.markdown(
-                        f'<div style="display:flex;justify-content:space-between;'
-                        f'padding:4px 0;border-bottom:1px solid {SEP}">'
-                        f'<span style="color:{MUT}">{name}</span>'
-                        f'<span>${val:,.2f} &nbsp;'
-                        f'<span style="color:{clr};font-size:0.85rem">{diff:+.1f}%</span>'
-                        f'</span></div>',
-                        unsafe_allow_html=True,
-                    )
-
-        with fib_col:
-            st.markdown("**Fibonacci Levels**")
-            for name, val in sorted(fib.items(), key=lambda x: x[1], reverse=True):
-                above      = price >= val
-                marker_clr = UP if above else DN
-                marker     = "▲ above" if above else "▼ below"
-                st.markdown(
-                    f'<div style="display:flex;justify-content:space-between;'
-                    f'padding:4px 0;border-bottom:1px solid {SEP}">'
-                    f'<span style="color:{MUT}">Fib {name}</span>'
-                    f'<span>${val:,.2f} &nbsp;'
-                    f'<span style="color:{marker_clr};font-size:0.85rem">{marker}</span>'
-                    f'</span></div>',
-                    unsafe_allow_html=True,
-                )
 
     # ── Section 7: Gap history ────────────────────────────────────────────────
     st.markdown("#### Gap History")
@@ -289,6 +253,48 @@ def render_analyzer_tab() -> None:
         rsi_dedup         = display_df["RSI"][~display_df.index.duplicated(keep="last")]
         gaps_df["RSI"]    = rsi_dedup.reindex(gaps_df.index)
     render_gap_table(gaps_df, show_rsi=True)
+
+
+# ── Key levels panel (always-visible right column below chart) ────────────────
+
+def _render_key_levels(latest, fib: dict, price: float) -> None:
+    st.markdown("**Key Price Levels**")
+    st.markdown(
+        f'<div style="font-size:11px;color:{MUT};text-transform:uppercase;'
+        f'letter-spacing:.05em;margin-bottom:4px">Moving Averages</div>',
+        unsafe_allow_html=True,
+    )
+    for name, key in [("MA 5", "MA5"), ("MA 20", "MA20"), ("MA 50", "MA50"),
+                      ("MA 100", "MA100"), ("MA 200", "MA200"), ("MA 200W", "MA200W")]:
+        val = float(latest.get(key, 0) or 0)
+        if val:
+            diff = (price - val) / val * 100
+            clr  = UP if diff >= 0 else DN
+            st.markdown(
+                f'<div style="display:flex;justify-content:space-between;'
+                f'padding:3px 0;border-bottom:1px solid {SEP}">'
+                f'<span style="color:{MUT};font-size:0.85rem">{name}</span>'
+                f'<span style="font-size:0.85rem">${val:,.2f}&nbsp;'
+                f'<span style="color:{clr}">{diff:+.1f}%</span></span></div>',
+                unsafe_allow_html=True,
+            )
+    st.markdown(
+        f'<div style="font-size:11px;color:{MUT};text-transform:uppercase;'
+        f'letter-spacing:.05em;margin:10px 0 4px">Fibonacci</div>',
+        unsafe_allow_html=True,
+    )
+    for name, val in sorted(fib.items(), key=lambda x: x[1], reverse=True):
+        above = price >= val
+        clr   = UP if above else DN
+        mark  = "▲" if above else "▼"
+        st.markdown(
+            f'<div style="display:flex;justify-content:space-between;'
+            f'padding:3px 0;border-bottom:1px solid {SEP}">'
+            f'<span style="color:{MUT};font-size:0.85rem">Fib {name}</span>'
+            f'<span style="font-size:0.85rem">${val:,.2f}&nbsp;'
+            f'<span style="color:{clr}">{mark}</span></span></div>',
+            unsafe_allow_html=True,
+        )
 
 
 # ── HTML helper (local, identical pattern to analyzer_fundamentals._stat_card) ─
