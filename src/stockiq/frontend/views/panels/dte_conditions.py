@@ -1,5 +1,7 @@
 """0DTE Conditions Meter panel — evaluates live signals and suggests a trade."""
 
+from datetime import date as _date
+
 import pandas as pd
 import streamlit as st
 
@@ -19,13 +21,26 @@ def render_dte_conditions(
     prev_close: float | None = None,
 ) -> None:
     try:
-        seed      = get_spy_options_analysis(expiration="", current_price=current_price)
+        today_iso = _date.today().isoformat()
+        seed      = get_spy_options_analysis(expiration=today_iso, current_price=current_price)
         max_pain  = seed["max_pain"]                    if seed else None
         gex_df    = seed.get("gex_df", pd.DataFrame()) if seed else pd.DataFrame()
         total_gex = gex_df["gex"].sum()                if not gex_df.empty else None
     except Exception:
         seed = None
+        today_iso = _date.today().isoformat()
         max_pain = total_gex = None
+
+    # Derive a human-readable label for the expiration actually used
+    exp_display = ""
+    if seed:
+        exp_used = seed.get("expiration", "")
+        try:
+            exp_idx     = seed["expirations"].index(exp_used)
+            exp_lbl     = seed["exp_labels"][exp_idx]
+            exp_display = f"{exp_lbl} · 0DTE" if exp_used == today_iso else exp_lbl
+        except (ValueError, IndexError):
+            exp_display = exp_used
 
     signals, call_pts, put_pts = _evaluate_signals(
         current_price, vix_snapshot, rsi, pc_data, max_pain, total_gex,
@@ -40,7 +55,7 @@ def render_dte_conditions(
 
     trade_content = trade_html or _neutral_panel()
     st.html(
-        _section_header() +
+        _section_header(exp_display) +
         '<div style="background:rgba(255,255,255,0.03);border:1px solid #1E293B;'
         'border-radius:12px;padding:18px 20px;margin-bottom:14px">' +
         _verdict_card(v_label, v_color, v_icon, v_note, call_pts, put_pts, neutral_pts, len(signals)) +
@@ -107,10 +122,10 @@ def _evaluate_signals(
     if total_gex is not None:
         gb = total_gex / 1e9
         if total_gex >= 0:
-            signals.append(("GEX", f"{gb:+.1f}B", "CALL", "Dealers buy dips & sell rips — market pinned up", "#22C55E"))
+            signals.append(("GEX", f"{gb:+.1f}B", "CALL", "Dealers buy dips & sell rips — price tends to stay range-bound", "#22C55E"))
             call_pts += 1
         else:
-            signals.append(("GEX", f"{gb:+.1f}B", "PUT",  "Dealers amplify moves — drops can accelerate", "#EF4444"))
+            signals.append(("GEX", f"{gb:+.1f}B", "PUT",  "Dealers amplify moves — expect larger intraday swings", "#EF4444"))
             put_pts += 1
     else:
         signals.append(("GEX", "N/A", "—", "Unavailable", "#475569"))
@@ -344,11 +359,17 @@ def _best_stop_put(price, em, reward, call_wall):
 
 # ── HTML components ────────────────────────────────────────────────────────────
 
-def _section_header() -> str:
+def _section_header(exp_label: str = "") -> str:
+    exp_chip = (
+        f'<span style="font-size:10px;font-weight:600;color:#475569;'
+        f'background:rgba(255,255,255,0.06);border-radius:4px;padding:2px 7px;'
+        f'margin-left:8px;letter-spacing:.02em;text-transform:none">{exp_label}</span>'
+        if exp_label else ""
+    )
     return (
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
-        '<span style="font-size:13px;font-weight:700;color:#94A3B8;letter-spacing:.06em;text-transform:uppercase">'
-        '0DTE Conditions</span>'
+        f'<span style="font-size:13px;font-weight:700;color:#94A3B8;letter-spacing:.06em;text-transform:uppercase">'
+        f'0DTE Conditions{exp_chip}</span>'
         '<span style="font-size:11px;color:#475569">not financial advice</span>'
         '</div>'
     )

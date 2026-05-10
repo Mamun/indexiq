@@ -1,6 +1,7 @@
 """SPY Dashboard page — thin orchestrator that composes panels."""
 
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
 import streamlit as st
@@ -33,14 +34,26 @@ def render_spy_dashboard_tab() -> None:
 
     @st.fragment(run_every="90s")
     def _live_section() -> None:
-        quote = get_spy_quote()
-        if not quote:
-            st.error("Could not load SPY data. Please try again in a moment.")
-            return
+        # Fire all independent fetches in parallel — they share no dependencies.
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            f_quote    = pool.submit(get_spy_quote)
+            f_overview = pool.submit(get_market_overview)
+            f_rsi      = pool.submit(_fetch_daily_rsi)
+            f_pc       = pool.submit(_fetch_pc_ratio)
+            f_rsi_top  = pool.submit(_fetch_rsi_top_analysis)
 
-        overview = get_market_overview()
-        rsi = _fetch_daily_rsi()
-        pc  = _fetch_pc_ratio()
+            quote = f_quote.result(timeout=15)
+            if not quote:
+                st.error("Could not load SPY data. Please try again in a moment.")
+                return
+
+            # quote is needed for prev_close; fetch intraday while others finish
+            intraday = _fetch_intraday_signals(quote)
+
+            overview = f_overview.result(timeout=10)
+            rsi      = f_rsi.result(timeout=10)
+            pc       = f_pc.result(timeout=10)
+            rsi_top  = f_rsi_top.result(timeout=30)
 
         render_spy_header(quote, overview["indices"])
         render_spy_summary_card(
@@ -55,10 +68,9 @@ def render_spy_dashboard_tab() -> None:
         render_spy_chart_section(quote)
 
         st.divider()
-        render_rsi_top_signals(_fetch_rsi_top_analysis())
+        render_rsi_top_signals(rsi_top)
 
         st.divider()
-        intraday = _fetch_intraday_signals(quote)
         render_dte_conditions(
             quote["price"], overview["vix"], rsi, pc,
             vwap=intraday["vwap"],

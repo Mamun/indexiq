@@ -253,7 +253,7 @@ def _build_signals(a: dict) -> list[dict]:
         signals.append({
             "name": "Breadth",
             "value": f"RSI {br.get('spx_rsi', '—')}",
-            "note": "^SPXA50R breadth data unavailable (market closed or data feed issue)",
+            "note": "Sector breadth data unavailable (market closed or data feed issue)",
             "status": "na",
         })
     elif br.get("detected"):
