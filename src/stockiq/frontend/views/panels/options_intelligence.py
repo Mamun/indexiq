@@ -54,7 +54,8 @@ def render_options_intelligence(current_price: float) -> None:
     expirations = seed["expirations"]
     default_idx = expirations.index(today_iso) if today_iso in expirations else 0
 
-    exp_col, _ = st.columns([2, 3])
+    # ── Top row: expiration selector (left) + strategy card (right) ──────────
+    exp_col, strat_col = st.columns([1, 3])
     with exp_col:
         selected_label = st.selectbox(
             "Option Chain", options=list(exp_map.keys()), index=default_idx, key="options_exp"
@@ -62,13 +63,32 @@ def render_options_intelligence(current_price: float) -> None:
     selected_iso = exp_map[selected_label]
 
     pc_scope_key, pc_scope_note = _derive_pc_scope(selected_iso)
-    pc       = get_put_call_ratio(scope=pc_scope_key)
-    data     = get_spy_options_analysis(expiration=selected_iso, current_price=current_price)
+    pc         = get_put_call_ratio(scope=pc_scope_key)
+    data       = get_spy_options_analysis(expiration=selected_iso, current_price=current_price)
     fetched_at = _datetime.now(tz=_ET).strftime("%-I:%M %p ET · %b %-d")
     if not data:
         st.caption("Options data unavailable for this expiration.")
         return
 
+    max_pain   = data["max_pain"]
+    oi_df      = data["oi_df"]
+    gex_df     = data.get("gex_df", pd.DataFrame())
+    em         = data.get("expected_move")
+    dist_pct   = (current_price - max_pain) / max_pain * 100 if max_pain else 0
+    mp_color, mp_signal = _max_pain_style(dist_pct)
+    dist_arrow = "▲" if dist_pct >= 0 else "▼"
+
+    suggestion = compute_strategy_suggestion(current_price, em, pc, gex_df, oi_df, max_pain, vol)
+    with strat_col:
+        _render_strategy_card(suggestion, selected_label)
+
+    st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
+
+    # ── Volatility Regime bar ─────────────────────────────────────────────────
+    _render_vol_regime_bar(vol)
+    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+
+    # ── Section header ────────────────────────────────────────────────────────
     st.markdown(
         f'<div style="font-size:11px;font-weight:700;color:#64748B;letter-spacing:.08em;'
         f'text-transform:uppercase;margin-bottom:10px">'
@@ -78,22 +98,6 @@ def render_options_intelligence(current_price: float) -> None:
         f'</div>',
         unsafe_allow_html=True,
     )
-
-    max_pain = data["max_pain"]
-    oi_df    = data["oi_df"]
-    dist_pct = (current_price - max_pain) / max_pain * 100 if max_pain else 0
-    mp_color, mp_signal = _max_pain_style(dist_pct)
-    dist_arrow = "▲" if dist_pct >= 0 else "▼"
-
-    gex_df = data.get("gex_df", pd.DataFrame())
-    em     = data.get("expected_move")
-
-    _render_vol_regime_bar(vol)
-    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-
-    suggestion = compute_strategy_suggestion(current_price, em, pc, gex_df, oi_df, max_pain, vol)
-    _render_strategy_card(suggestion, selected_label)
-    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
     cards_col, chart_col = st.columns([2, 5])
     with cards_col:
