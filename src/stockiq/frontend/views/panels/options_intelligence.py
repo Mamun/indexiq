@@ -108,6 +108,12 @@ def render_options_intelligence(current_price: float) -> None:
         else:
             st.caption("No options data for this expiration.")
 
+    sig_col, squeeze_col = st.columns([1, 1], gap="large")
+    with sig_col:
+        _render_signals_panel(_compute_signals(gex_df, oi_df, current_price, max_pain, selected_label))
+    with squeeze_col:
+        _render_gamma_squeeze_panel(_compute_gamma_squeeze(gex_df, oi_df, pc, current_price))
+
     st.markdown(
         '<div style="font-size:11px;font-weight:700;color:#64748B;'
         'letter-spacing:.08em;text-transform:uppercase;margin:20px 0 10px">'
@@ -122,6 +128,232 @@ def render_options_intelligence(current_price: float) -> None:
         st.plotly_chart(oi_heatmap_chart(call_pivot, put_pivot, current_price), use_container_width=True)
     else:
         st.caption("Heatmap data unavailable.")
+
+
+# ── Signals computation ────────────────────────────────────────────────────────
+
+def _compute_signals(
+    gex_df: pd.DataFrame,
+    oi_df: pd.DataFrame,
+    current_price: float,
+    max_pain: float,
+    exp_label: str = "",
+) -> list[dict]:
+    signals: list[dict] = []
+    gex_threshold = gex_df["gex"].abs().quantile(0.75) if not gex_df.empty else 0
+
+    if not gex_df.empty:
+        for _, row in gex_df.nlargest(3, "gex").iterrows():
+            strike, gex_val = float(row["strike"]), float(row["gex"])
+            dist = (strike - current_price) / current_price * 100
+            strength = "STRONG" if abs(gex_val) >= gex_threshold else "MODERATE"
+            desc = (
+                "Price movements likely to be dampened, good for selling volatility"
+                if gex_val > 0
+                else "Expect increased volatility if price falls below this level"
+            )
+            signals.append({"type": "Volatility", "icon": "⚠", "desc": desc,
+                             "price": strike, "dist": dist, "strength": strength,
+                             "color": "#F59E0B"})
+
+    if not oi_df.empty:
+        call_strike = float(oi_df.loc[oi_df["call_oi"].idxmax(), "strike"])
+        put_strike  = float(oi_df.loc[oi_df["put_oi"].idxmax(),  "strike"])
+        signals.append({"type": "Magnet", "icon": "◎",
+                         "desc": "Price likely to gravitate toward this level",
+                         "price": call_strike,
+                         "dist": (call_strike - current_price) / current_price * 100,
+                         "strength": "STRONG", "color": "#A78BFA"})
+        signals.append({"type": "Support", "icon": "▣",
+                         "desc": "Market dynamics change significantly if breached",
+                         "price": put_strike,
+                         "dist": (put_strike - current_price) / current_price * 100,
+                         "strength": "MODERATE", "color": "#22C55E"})
+
+    if max_pain:
+        dist = (max_pain - current_price) / current_price * 100
+        exp_note = f" · expires {exp_label}" if exp_label else ""
+        signals.append({"type": "Magnet", "icon": "◎",
+                         "desc": f"Max pain — price gravitates here into expiry{exp_note}",
+                         "price": max_pain,
+                         "dist": dist,
+                         "strength": "STRONG", "color": "#A78BFA"})
+
+    signals.sort(key=lambda x: abs(x["dist"]))
+    return signals[:5]
+
+
+def _render_signals_panel(signals: list[dict]) -> None:
+    st.markdown(
+        '<div style="font-size:11px;font-weight:700;color:#64748B;letter-spacing:.08em;'
+        'text-transform:uppercase;margin:20px 0 10px">⚡ Signals</div>',
+        unsafe_allow_html=True,
+    )
+    if not signals:
+        st.caption("Insufficient options data for signals.")
+        return
+    for sig in signals:
+        dist_clr = "#22C55E" if sig["dist"] >= 0 else "#EF4444"
+        badge_clr = "#F59E0B" if sig["strength"] == "STRONG" else "#64748B"
+        st.markdown(
+            f'<div style="background:rgba(255,255,255,0.03);border:1px solid #1E293B;'
+            f'border-radius:8px;padding:10px 14px;margin-bottom:6px">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;'
+            f'margin-bottom:3px">'
+            f'<span style="font-weight:700;color:#F1F5F9;font-size:0.88rem">'
+            f'{sig["icon"]} {sig["type"]}</span>'
+            f'<span style="background:{badge_clr}33;color:{badge_clr};font-size:0.7rem;'
+            f'font-weight:700;padding:1px 7px;border-radius:4px;letter-spacing:.05em">'
+            f'{sig["strength"]}</span>'
+            f'</div>'
+            f'<div style="font-size:0.78rem;color:#94A3B8;margin-bottom:3px">{sig["desc"]}</div>'
+            f'<div style="font-size:0.75rem;color:#64748B">'
+            f'@ ${sig["price"]:,.2f} &nbsp;'
+            f'<span style="color:{dist_clr}">{sig["dist"]:+.2f}%</span></div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+
+# ── Gamma Squeeze computation ──────────────────────────────────────────────────
+
+def _compute_gamma_squeeze(
+    gex_df: pd.DataFrame,
+    oi_df: pd.DataFrame,
+    pc: dict | None,
+    current_price: float,
+) -> dict:
+    factors: dict[str, int] = {}
+
+    # 1. Gamma Regime (0-30): negative GEX = dealers amplify = squeeze fuel
+    gamma_score = 0
+    if not gex_df.empty:
+        total_gex = float(gex_df["gex"].sum())
+        if total_gex < 0:
+            gamma_score = min(30, int(abs(total_gex) / 1e8))
+    factors["Gamma Regime"] = gamma_score
+
+    # 2. Call Wall Proximity (0-25): price approaching call wall from below
+    call_score = 0
+    if not oi_df.empty:
+        call_wall = float(oi_df.loc[oi_df["call_oi"].idxmax(), "strike"])
+        dist = (call_wall - current_price) / current_price * 100
+        if 0 < dist <= 0.5:
+            call_score = 25
+        elif 0 < dist <= 1.0:
+            call_score = 20
+        elif 0 < dist <= 2.0:
+            call_score = 15
+        elif 0 < dist <= 3.0:
+            call_score = 10
+    factors["Call Wall Proximity"] = call_score
+
+    # 3. Flow Alignment (0-20): low P/C = call-heavy flow = bullish squeeze
+    flow_score = 0
+    if pc:
+        r = pc["ratio"]
+        flow_score = 20 if r < 0.6 else 15 if r < 0.8 else 10 if r < 1.0 else 5 if r < 1.2 else 0
+    factors["Flow Alignment"] = flow_score
+
+    # 4. Volume Confirm (0-15): call OI dominance in the chain
+    vol_score = 0
+    if not oi_df.empty:
+        total_c = float(oi_df["call_oi"].sum())
+        total_p = float(oi_df["put_oi"].sum())
+        if total_c + total_p > 0:
+            call_share = total_c / (total_c + total_p)
+            vol_score = 15 if call_share > 0.65 else 10 if call_share > 0.55 else 5 if call_share > 0.45 else 0
+    factors["Volume Confirm"] = vol_score
+
+    # 5. DEX Bias (0-10): net near-ATM GEX direction
+    dex_score = 0
+    if not gex_df.empty:
+        near = gex_df[(gex_df["strike"] >= current_price * 0.98) &
+                      (gex_df["strike"] <= current_price * 1.02)]
+        near_gex = float(near["gex"].sum()) if not near.empty else 0
+        dex_score = 10 if near_gex > 0 else 5 if near_gex > -1e8 else 0
+    factors["DEX Bias"] = dex_score
+
+    total = sum(factors.values())
+    if total >= 75:
+        label, badge_color = "Imminent", "#EF4444"
+    elif total >= 50:
+        label, badge_color = "Likely",   "#F59E0B"
+    elif total >= 25:
+        label, badge_color = "Possible", "#A78BFA"
+    else:
+        label, badge_color = "Unlikely", "#475569"
+
+    pc_ratio = pc["ratio"] if pc else 1.0
+    direction = "Bullish Squeeze" if pc_ratio < 1.0 else "Bearish Squeeze"
+    bias_label = "BULLISH BIAS" if pc_ratio < 1.0 else "BEARISH BIAS"
+    bias_color = "#22C55E" if pc_ratio < 1.0 else "#EF4444"
+
+    return {"score": total, "label": label, "badge_color": badge_color,
+            "factors": factors, "direction": direction,
+            "bias_label": bias_label, "bias_color": bias_color}
+
+
+def _render_gamma_squeeze_panel(squeeze: dict) -> None:
+    score       = squeeze["score"]
+    badge_color = squeeze["badge_color"]
+    factors     = squeeze["factors"]
+    _MAX = {"Gamma Regime": 30, "Call Wall Proximity": 25,
+            "Flow Alignment": 20, "Volume Confirm": 15, "DEX Bias": 10}
+
+    st.markdown(
+        '<div style="font-size:11px;font-weight:700;color:#64748B;letter-spacing:.08em;'
+        'text-transform:uppercase;margin:20px 0 10px">Gamma Squeeze Screener</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<div style="background:rgba(255,255,255,0.03);border:1px solid #1E293B;'
+        f'border-radius:10px;padding:16px">'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;'
+        f'margin-bottom:12px">'
+        f'<div style="display:flex;align-items:center;gap:6px">'
+        f'<span style="background:{squeeze["bias_color"]}33;color:{squeeze["bias_color"]};'
+        f'font-size:0.7rem;font-weight:700;padding:1px 8px;border-radius:4px;'
+        f'letter-spacing:.06em">{squeeze["bias_label"]}</span>'
+        f'</div>'
+        f'<span style="font-weight:700;color:#F1F5F9">{squeeze["direction"]}</span>'
+        f'<span style="background:{badge_color}33;color:{badge_color};font-size:0.72rem;'
+        f'font-weight:700;padding:2px 10px;border-radius:4px;letter-spacing:.05em">'
+        f'{squeeze["label"].upper()}</span>'
+        f'</div>'
+        f'<div style="font-size:0.7rem;color:#64748B;text-transform:uppercase;'
+        f'letter-spacing:.06em;margin-bottom:2px">PROBABILITY SCORE</div>'
+        f'<div style="font-size:2.2rem;font-weight:900;color:#F1F5F9;line-height:1;'
+        f'margin-bottom:10px">{score}'
+        f'<span style="font-size:0.9rem;color:#64748B">/100</span></div>'
+        f'<div style="background:#1E293B;border-radius:4px;height:6px;margin-bottom:4px">'
+        f'<div style="width:{score}%;height:100%;background:{badge_color};border-radius:4px">'
+        f'</div></div>'
+        f'<div style="display:flex;justify-content:space-between;font-size:0.65rem;'
+        f'color:#475569;margin-bottom:14px">'
+        f'<span>Unlikely</span><span>Possible</span><span>Likely</span><span>Imminent</span>'
+        f'</div>'
+        f'<div style="font-size:0.7rem;color:#64748B;text-transform:uppercase;'
+        f'letter-spacing:.06em;margin-bottom:8px">FACTOR BREAKDOWN</div>',
+        unsafe_allow_html=True,
+    )
+    for factor, val in factors.items():
+        max_val = _MAX.get(factor, 10)
+        bar_w   = val / max_val * 100 if max_val else 0
+        bar_clr = "#22C55E" if bar_w > 60 else "#F59E0B" if bar_w > 30 else "#475569"
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">'
+            f'<span style="font-size:0.8rem;color:#94A3B8;width:150px;white-space:nowrap">'
+            f'{factor}</span>'
+            f'<div style="flex:1;background:#1E293B;border-radius:3px;height:5px">'
+            f'<div style="width:{bar_w:.0f}%;height:100%;background:{bar_clr};border-radius:3px">'
+            f'</div></div>'
+            f'<span style="font-size:0.82rem;color:#F1F5F9;width:22px;text-align:right">'
+            f'{val}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ── P/C scope derivation ───────────────────────────────────────────────────────
