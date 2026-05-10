@@ -130,11 +130,8 @@ def render_spy_summary_card(
     vix_snapshot: dict | None = None,
     pc_data: dict | None = None,
 ) -> None:
-    """
-    SPY technical snapshot — single row.
-    Optionally prepends signal cells (RSI, VIX, P/C) when provided.
-    """
-    ma5 = ma50 = ma100 = ma200 = ema21 = cross_label = cross_clr = None
+    """SPY snapshot — compact key/value rows matching the Fundamentals panel style."""
+    ma5 = ma50 = ma100 = ma200 = ema21 = None
     vol_avg_20d = None
 
     if not daily_df.empty:
@@ -147,110 +144,101 @@ def render_spy_summary_card(
         ma200 = _ma(200)
         if len(daily_df) >= 21:
             ema21 = float(daily_df["Close"].ewm(span=21, adjust=False).mean().iloc[-1])
-        if ma50 and ma200:
-            cross_label = "🌟 Golden Cross" if ma50 > ma200 else "💀 Death Cross"
-            cross_clr   = _UP if ma50 > ma200 else _DN
-
         if "Volume" in daily_df.columns and len(daily_df) >= 20:
             vol_avg_20d = float(daily_df["Volume"].rolling(20).mean().iloc[-1])
 
-    w52_hi  = quote.get("w52_high", 0) or 0
-    w52_lo  = quote.get("w52_low",  0) or 0
-    vol_now = quote.get("volume",   0) or 0
+    w52_hi     = quote.get("w52_high",   0) or 0
+    w52_lo     = quote.get("w52_low",    0) or 0
+    vol_now    = quote.get("volume",     0) or 0
+    prev_close = quote.get("prev_close", 0) or 0
+    day_high   = quote.get("day_high",   0) or 0
+    day_low    = quote.get("day_low",    0) or 0
 
-    # ── 52W range gauge (compact inline) ─────────────────────────────────────
-    if w52_hi > w52_lo and price:
-        pos_pct     = (price - w52_lo) / (w52_hi - w52_lo) * 100
-        pct_from_hi = (price / w52_hi - 1) * 100
-        bar_filled  = max(2, min(98, round(pos_pct)))
-        bar_clr     = _UP if pos_pct >= 50 else _DN
-        range_cell  = (
-            f'<div style="padding:8px 18px;border-right:1px solid {_SEP};flex:1;min-width:180px">'
-            f'<div style="font-size:11px;color:{_MUT};text-transform:uppercase;'
-            f'letter-spacing:.05em;margin-bottom:5px">52W Range</div>'
-            f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
-            f'  <span style="font-size:10px;color:{_MUT};white-space:nowrap">${w52_lo:,.0f}</span>'
-            f'  <div style="width:90px;height:5px;border-radius:3px;background:#1E293B;'
-            f'flex-shrink:0;position:relative">'
-            f'    <div style="width:{bar_filled}%;height:100%;border-radius:3px;'
-            f'background:{bar_clr}"></div>'
-            f'    <div style="position:absolute;top:-3px;left:{bar_filled}%;'
-            f'transform:translateX(-50%);width:2px;height:11px;background:#F1F5F9;'
-            f'border-radius:1px"></div>'
-            f'  </div>'
-            f'  <span style="font-size:10px;color:{_MUT};white-space:nowrap">${w52_hi:,.0f}</span>'
-            f'</div>'
-            f'<div style="font-size:14px;font-weight:700;color:{_VAL}">'
-            f'  {pos_pct:.1f}%'
-            f'  <span style="font-size:11px;color:{_MUT};font-weight:400">'
-            f'  &nbsp;within range &nbsp;·&nbsp; {pct_from_hi:+.1f}% vs hi</span>'
-            f'</div>'
-            f'</div>'
-        )
-    else:
-        range_cell = ""
+    chg_clr = _UP if chg >= 0 else _DN
+    arrow   = "▲" if chg >= 0 else "▼"
 
-    # ── Volume vs 20D avg ─────────────────────────────────────────────────────
+    # ── Left column: price rows ───────────────────────────────────────────────
+    price_rows = [
+        ("SPY",        f"${price:,.2f}", f"{arrow} {abs(chg):.2f} ({chg_pct:+.2f}%)", chg_clr),
+        ("Prev Close", f"${prev_close:,.2f}" if prev_close else "—", "", None),
+        ("Day High",   f"${day_high:,.2f}"   if day_high  else "—", "", None),
+        ("Day Low",    f"${day_low:,.2f}"    if day_low   else "—", "", None),
+        ("52W High",   f"${w52_hi:,.2f}"     if w52_hi    else "—", "", None),
+        ("52W Low",    f"${w52_lo:,.2f}"     if w52_lo    else "—", "", None),
+    ]
     if vol_now and vol_avg_20d:
-        vol_vs_avg = (vol_now / vol_avg_20d - 1) * 100
-        vol_clr    = _UP if vol_vs_avg >= 20 else _DN if vol_vs_avg <= -20 else _MUT
-        vol_cell   = _cell("Volume", f"{vol_now/1_000_000:.1f}M",
-                           f"{vol_vs_avg:+.0f}% vs 20D avg", vol_clr)
+        vol_vs = (vol_now / vol_avg_20d - 1) * 100
+        vol_clr = _UP if vol_vs >= 20 else _DN if vol_vs <= -20 else _MUT
+        price_rows.append(("Volume", f"{vol_now/1_000_000:.1f}M", f"{vol_vs:+.0f}% vs 20D avg", vol_clr))
     elif vol_now:
-        vol_cell   = _cell("Volume", f"{vol_now/1_000_000:.1f}M")
-    else:
-        vol_cell   = _cell("Volume", "—")
+        price_rows.append(("Volume", f"{vol_now/1_000_000:.1f}M", "", None))
 
-    # ── MA alignment ──────────────────────────────────────────────────────────
-    cross_cell = _cell("MA Trend", cross_label, "MA50 vs MA200", cross_clr) if cross_label else ""
-
-    # ── Optional signal cells (RSI · VIX · P/C) ──────────────────────────────
-    signal_cells = ""
+    # ── Right column: technicals rows ─────────────────────────────────────────
+    tech_rows: list[tuple] = []
 
     if rsi is not None:
-        if rsi < 30:
-            rc, rs = _UP,  "Oversold"
-        elif rsi < 45:
-            rc, rs = "#86EFAC", "Weak"
-        elif rsi < 55:
-            rc, rs = _MUT, "Neutral"
-        elif rsi < 70:
-            rc, rs = "#FCD34D", "Strong"
-        else:
-            rc, rs = _DN,  "Overbought"
-        signal_cells += _cell("RSI (14d)", f"{rsi:.1f}", rs, rc)
+        if rsi < 30:    rc, rs = _UP,       "Oversold"
+        elif rsi < 45:  rc, rs = "#86EFAC", "Weak"
+        elif rsi < 55:  rc, rs = _MUT,      "Neutral"
+        elif rsi < 70:  rc, rs = "#FCD34D", "Strong"
+        else:           rc, rs = _DN,       "Overbought"
+        tech_rows.append(("RSI (14d)", f"{rsi:.1f}", rs, rc))
 
     if vix_snapshot:
-        _VZ_CLR = {"Calm": _UP, "Normal": "#86EFAC",
-                   "Elevated": _NEU, "Extreme Fear": _DN}
+        _VZ_CLR = {"Calm": _UP, "Normal": "#86EFAC", "Elevated": _NEU, "Extreme Fear": _DN}
         vix_now  = vix_snapshot.get("current")
         vix_zone = vix_snapshot.get("zone", "")
         if vix_now and vix_zone:
-            vc = _VZ_CLR.get(vix_zone, _MUT)
-            signal_cells += _cell("VIX", f"{vix_now:.2f}", vix_zone, vc)
+            tech_rows.append(("VIX", f"{vix_now:.2f}", vix_zone, _VZ_CLR.get(vix_zone, _MUT)))
 
     if pc_data:
         short_sig = pc_data["signal"].split("—")[0].strip() if "—" in pc_data["signal"] else pc_data["signal"]
-        signal_cells += _cell("P/C Daily", f"{pc_data['ratio']:.3f}", short_sig, pc_data["color"])
+        tech_rows.append(("P/C Ratio", f"{pc_data['ratio']:.3f}", short_sig, pc_data["color"]))
 
-    # ── Single combined row ───────────────────────────────────────────────────
-    single_row = "".join([
-        signal_cells,
-        range_cell,
-        vol_cell,
-        cross_cell,
-        _ma_cell("MA 5",   ma5,   price) if ma5   else "",
-        _ma_cell("EMA 21", ema21, price) if ema21 else "",
-        _ma_cell("MA 50",  ma50,  price) if ma50  else "",
-        _ma_cell("MA 100", ma100, price) if ma100 else "",
-        _ma_cell("MA 200", ma200, price) if ma200 else "",
-    ])
+    if ma50 and ma200:
+        cross_label = "Golden Cross" if ma50 > ma200 else "Death Cross"
+        cross_clr   = _UP if ma50 > ma200 else _DN
+        tech_rows.append(("MA Trend", cross_label, "MA50 vs MA200", cross_clr))
 
-    row_style = f"display:flex;flex-wrap:nowrap;background:{_BG};width:100%"
-    st.markdown(
-        f'<div style="background:{_BG};border:1px solid {_SEP};border-radius:8px;'
-        f'overflow:hidden;margin-bottom:4px;width:100%">'
-        f'<div style="{row_style}">{single_row}</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
+    for label, val in [("MA 5", ma5), ("EMA 21", ema21), ("MA 50", ma50),
+                        ("MA 100", ma100), ("MA 200", ma200)]:
+        if val:
+            diff = (price - val) / val * 100
+            clr  = _UP if diff >= 0 else _DN
+            tech_rows.append((label, f"${val:,.2f}", f"{diff:+.2f}% vs price", clr))
+
+    left, right = st.columns(2, gap="large")
+    with left:
+        st.markdown(
+            f'<div style="font-size:0.72rem;color:{_MUT};text-transform:uppercase;'
+            f'letter-spacing:.08em;margin-bottom:6px">Price</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(_kv_table(price_rows), unsafe_allow_html=True)
+    with right:
+        st.markdown(
+            f'<div style="font-size:0.72rem;color:{_MUT};text-transform:uppercase;'
+            f'letter-spacing:.08em;margin-bottom:6px">Technicals</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(_kv_table(tech_rows), unsafe_allow_html=True)
+
+
+def _kv_table(rows: list[tuple]) -> str:
+    """Render a list of (label, value, sub, color) tuples as a compact fundamentals-style table."""
+    html = ""
+    for i, (label, value, sub, clr) in enumerate(rows):
+        bg       = f"background:{_BG};" if i % 2 == 0 else ""
+        val_clr  = clr or _VAL
+        sub_html = (
+            f'<span style="color:{clr or _MUT};font-size:0.7rem;margin-left:6px">{sub}</span>'
+            if sub else ""
+        )
+        html += (
+            f'<div style="{bg}display:flex;align-items:center;gap:10px;'
+            f'padding:5px 8px;border-bottom:1px solid {_SEP}">'
+            f'<span style="color:{_MUT};font-size:0.82rem;width:82px;flex-shrink:0">{label}</span>'
+            f'<span style="font-size:0.85rem;font-weight:600;color:{val_clr}">{value}{sub_html}</span>'
+            f'</div>'
+        )
+    return f'<div style="border:1px solid {_SEP};border-radius:8px;overflow:hidden">{html}</div>'

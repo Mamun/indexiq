@@ -143,18 +143,31 @@ def _compute_signals(
     gex_threshold = gex_df["gex"].abs().quantile(0.75) if not gex_df.empty else 0
 
     if not gex_df.empty:
-        for _, row in gex_df.nlargest(3, "gex").iterrows():
-            strike, gex_val = float(row["strike"]), float(row["gex"])
-            dist = (strike - current_price) / current_price * 100
-            strength = "STRONG" if abs(gex_val) >= gex_threshold else "MODERATE"
-            desc = (
-                "Price movements likely to be dampened, good for selling volatility"
-                if gex_val > 0
-                else "Expect increased volatility if price falls below this level"
-            )
-            signals.append({"type": "Volatility", "icon": "⚠", "desc": desc,
-                             "price": strike, "dist": dist, "strength": strength,
-                             "color": "#F59E0B"})
+        # Peak GEX strike — strongest dealer support / damping zone
+        peak_row    = gex_df.loc[gex_df["gex"].idxmax()]
+        peak_strike = float(peak_row["strike"])
+        peak_gex    = float(peak_row["gex"])
+        peak_str    = "STRONG" if abs(peak_gex) >= gex_threshold else "MODERATE"
+        signals.append({
+            "type": "GEX Support", "icon": "◆",
+            "desc": "Highest dealer hedging pressure — strongest price-damping zone, good for selling volatility",
+            "price": peak_strike,
+            "dist": (peak_strike - current_price) / current_price * 100,
+            "strength": peak_str, "color": "#22C55E",
+        })
+        # GEX flip strike — most negative GEX = dealer amplification risk
+        flip_row    = gex_df.loc[gex_df["gex"].idxmin()]
+        flip_strike = float(flip_row["strike"])
+        flip_gex    = float(flip_row["gex"])
+        if flip_gex < 0:
+            flip_str = "STRONG" if abs(flip_gex) >= gex_threshold else "MODERATE"
+            signals.append({
+                "type": "GEX Flip", "icon": "⚠",
+                "desc": "Negative GEX zone — dealer hedging amplifies moves if price crosses here",
+                "price": flip_strike,
+                "dist": (flip_strike - current_price) / current_price * 100,
+                "strength": flip_str, "color": "#F59E0B",
+            })
 
     if not oi_df.empty:
         call_strike = float(oi_df.loc[oi_df["call_oi"].idxmax(), "strike"])

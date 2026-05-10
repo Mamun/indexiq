@@ -112,8 +112,8 @@ S&P 500, derived from real-time options prices. It is often called the **"fear g
 
 
 def _render_vix_chart_section(vix: dict) -> None:
-    _qp = st.query_params.get("vix_period", "1Y")
-    default_idx = _VIX_PERIODS.index(_qp) if _qp in _VIX_PERIODS else 3
+    _qp = st.query_params.get("vix_period", "1M")
+    default_idx = _VIX_PERIODS.index(_qp) if _qp in _VIX_PERIODS else 0
 
     vix_choice = st.radio("Period", _VIX_PERIODS, horizontal=True,
                           key="vix_period", index=default_idx)

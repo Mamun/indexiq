@@ -24,6 +24,10 @@ from stockiq.frontend.views.panels.spy_chart import render_spy_chart_section
 from stockiq.frontend.views.panels.spy_header import render_spy_header
 
 
+_TAB_LABELS = {"market": "Market Overview", "options": "Options"}
+_TAB_KEY    = "spy_active_tab"
+
+
 def render_spy_dashboard_tab() -> None:
     # Gap data is historical (changes once at market open) — fetch once per page load,
     # not on every fragment refresh.
@@ -31,6 +35,25 @@ def render_spy_dashboard_tab() -> None:
         gap_data = get_spy_gap_table_data()
     except Exception:
         gap_data = {"gaps_df": pd.DataFrame(), "quote": {}, "daily_df": pd.DataFrame()}
+
+    # Seed session state from URL on the very first load; subsequent reruns use
+    # session state so the widget never fights itself with a re-evaluated default.
+    if _TAB_KEY not in st.session_state:
+        url_tab = st.query_params.get("tab", "market")
+        st.session_state[_TAB_KEY] = url_tab if url_tab in _TAB_LABELS else "market"
+
+    def _sync_url() -> None:
+        st.query_params["tab"] = st.session_state[_TAB_KEY]
+
+    st.segmented_control(
+        "Tab",
+        options=list(_TAB_LABELS.keys()),
+        format_func=_TAB_LABELS.get,
+        key=_TAB_KEY,
+        label_visibility="collapsed",
+        on_change=_sync_url,
+    )
+    active_tab = st.session_state[_TAB_KEY]
 
     @st.fragment(run_every="90s")
     def _live_section() -> None:
@@ -56,43 +79,40 @@ def render_spy_dashboard_tab() -> None:
             rsi_top  = f_rsi_top.result(timeout=30)
 
         render_spy_header(quote, overview["indices"])
-        render_spy_summary_card(
-            quote, quote["price"], quote["change"], quote["change_pct"],
-            gap_data["daily_df"],
-            rsi=rsi,
-            vix_snapshot=overview["vix"],
-            pc_data=pc,
-        )
 
-        st.divider()
-        render_spy_chart_section(quote)
-
-        st.divider()
-        render_rsi_top_signals(rsi_top)
-
-        st.divider()
-        render_dte_conditions(
-            quote["price"], overview["vix"], rsi, pc,
-            vwap=intraday["vwap"],
-            or_high=intraday["or_high"],
-            or_low=intraday["or_low"],
-            pdh=intraday["pdh"],
-            pdl=intraday["pdl"],
-            prev_close=intraday["prev_close"],
-        )
-
-        st.divider()
-        render_options_intelligence(quote["price"])
+        if active_tab == "market":
+            render_spy_summary_card(
+                quote, quote["price"], quote["change"], quote["change_pct"],
+                gap_data["daily_df"],
+                rsi=rsi,
+                vix_snapshot=overview["vix"],
+                pc_data=pc,
+            )
+            st.divider()
+            render_spy_chart_section(quote)
+            st.divider()
+            render_rsi_top_signals(rsi_top)
+            st.divider()
+            try:
+                render_ai_forecast(gap_data["gaps_df"], gap_data["quote"])
+                st.divider()
+            except Exception:
+                pass
+            _render_gap_section(gap_data)
+        else:
+            render_dte_conditions(
+                quote["price"], overview["vix"], rsi, pc,
+                vwap=intraday["vwap"],
+                or_high=intraday["or_high"],
+                or_low=intraday["or_low"],
+                pdh=intraday["pdh"],
+                pdl=intraday["pdl"],
+                prev_close=intraday["prev_close"],
+            )
+            st.divider()
+            render_options_intelligence(quote["price"])
 
     _live_section()
-
-    st.divider()
-    try:
-        render_ai_forecast(gap_data["gaps_df"], gap_data["quote"])
-        st.divider()
-    except Exception:
-        pass
-    _render_gap_section(gap_data)
 
 
 # ── Private helpers ────────────────────────────────────────────────────────────
@@ -106,7 +126,7 @@ def _fetch_rsi_top_analysis() -> dict:
 
 def _fetch_daily_rsi() -> float | None:
     try:
-        df = get_spy_chart_df(period="1y", interval="1d")
+        df = get_spy_chart_df(period="2y", interval="1d")
         if not df.empty and "RSI" in df.columns:
             series = df["RSI"].dropna()
             if not series.empty:
