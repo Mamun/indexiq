@@ -159,6 +159,27 @@ def _yahoo_chain_for_bid_ask(expiration: str, side: str) -> pd.DataFrame:
     return pd.DataFrame()
 
 
+def get_spy_gaps_df() -> pd.DataFrame:
+    """
+    Unfilled SPY daily gaps for reference-target computation in strategy suggester.
+    Reuses the already-cached daily OHLCV — no extra network call.
+    Returns DataFrame with Gap, Gap %, Gap Filled, Prev Close columns (DatetimeIndex).
+    """
+    from stockiq.backend.models.indicators import compute_daily_gaps, patch_today_gap
+    from stockiq.backend.data.local_gap_cache import apply_gap_cache
+    try:
+        daily_df = _get_spy_daily_df()
+        if daily_df.empty:
+            return pd.DataFrame()
+        quote   = get_spy_quote()
+        raw     = compute_daily_gaps(daily_df)
+        if raw.empty:
+            return pd.DataFrame()
+        return apply_gap_cache(patch_today_gap(raw, quote))
+    except Exception:
+        return pd.DataFrame()
+
+
 def get_rsi_top_analysis() -> dict:
     """RSI-based market top detection: divergence, TF stack, failure swing, MA stretch, breadth."""
     from stockiq.backend.models.rsi_top import (

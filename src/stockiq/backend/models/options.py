@@ -282,6 +282,7 @@ def compute_strategy_suggestion(
     oi_df: pd.DataFrame,
     max_pain: float,
     vol: dict | None,
+    gaps_df: pd.DataFrame | None = None,
 ) -> dict | None:
     """
     Synthesize options chain signals into a weekly strategy recommendation.
@@ -289,6 +290,7 @@ def compute_strategy_suggestion(
     Direction bias from: P/C ratio, max pain gravity, total GEX regime, OI wall proximity.
     Strategy type from: direction × vol regime (sell/buy premium).
     Strike hints from: expected move (30% / 60% of EM as short / long legs).
+    Reference targets from: nearest unfilled gap fill, OI walls, EM boundary, max pain.
     """
     if not current_price:
         return None
@@ -427,6 +429,106 @@ def compute_strategy_suggestion(
         elif strategy == "Long Straddle":
             strike_label = f"ATM ${current_price:,.0f} (call + put)"
 
+    # ── Reference targets ─────────────────────────────────────────────────────
+    call_wall_t: float | None = None
+    put_wall_t:  float | None = None
+    if not oi_df.empty:
+        call_wall_t = float(oi_df.loc[oi_df["call_oi"].idxmax(), "strike"])
+        put_wall_t  = float(oi_df.loc[oi_df["put_oi"].idxmax(),  "strike"])
+
+    # Nearest unfilled gap fill level in the trade direction
+    gap_fill_level: float | None = None
+    gap_fill_pct:   float | None = None
+    gap_fill_date:  str   | None = None
+    if (gaps_df is not None and not gaps_df.empty
+            and "Gap" in gaps_df.columns and "Prev Close" in gaps_df.columns
+            and "Gap Filled" in gaps_df.columns):
+        unfilled = gaps_df[
+            (gaps_df["Gap"].abs() >= 0.10) &
+            (~gaps_df["Gap Filled"].astype(bool))
+        ]
+        if direction == "Bullish":
+            above = unfilled[unfilled["Prev Close"] > current_price * 1.001]
+            if not above.empty:
+                idx            = (above["Prev Close"] - current_price).idxmin()
+                gap_fill_level = round(float(above.at[idx, "Prev Close"]), 2)
+                gap_fill_pct   = round((gap_fill_level - current_price) / current_price * 100, 2)
+                gap_fill_date  = idx.strftime("%b %-d") if hasattr(idx, "strftime") else str(idx)[:10]
+        elif direction == "Bearish":
+            below = unfilled[unfilled["Prev Close"] < current_price * 0.999]
+            if not below.empty:
+                idx            = (current_price - below["Prev Close"]).idxmin()
+                gap_fill_level = round(float(below.at[idx, "Prev Close"]), 2)
+                gap_fill_pct   = round((gap_fill_level - current_price) / current_price * 100, 2)
+                gap_fill_date  = idx.strftime("%b %-d") if hasattr(idx, "strftime") else str(idx)[:10]
+
+    # Primary reference target (nearest meaningful level in trade direction)
+    ref_target:  float | None = None
+    ref_source:  str          = "—"
+    stop_level:  float | None = None
+    stop_source: str          = "—"
+    total_gex = float(gex_df["gex"].sum()) if not gex_df.empty else 0.0
+
+    if direction == "Bullish":
+        cands = []
+        if gap_fill_level and gap_fill_level > current_price:
+            cands.append((gap_fill_level, "Gap fill"))
+        if call_wall_t and call_wall_t > current_price:
+            cands.append((call_wall_t, "Call wall"))
+        if em and em["high"] > current_price:
+            cands.append((em["high"], "EM upper"))
+        if max_pain and max_pain > current_price:
+            cands.append((max_pain, "Max pain"))
+        if cands:
+            ref_target, ref_source = min(cands, key=lambda x: x[0])
+        if put_wall_t and put_wall_t < current_price:
+            stop_level, stop_source = put_wall_t, "Put wall"
+        elif em:
+            stop_level, stop_source = em["low"], "EM lower"
+        hold_note = (
+            "Hold while GEX > 0 — dealer long gamma keeps dips shallow"
+            if total_gex >= 0
+            else "Negative GEX — moves can accelerate; take profits near target"
+        )
+    elif direction == "Bearish":
+        cands = []
+        if gap_fill_level and gap_fill_level < current_price:
+            cands.append((gap_fill_level, "Gap fill"))
+        if put_wall_t and put_wall_t < current_price:
+            cands.append((put_wall_t, "Put wall"))
+        if em and em["low"] < current_price:
+            cands.append((em["low"], "EM lower"))
+        if max_pain and max_pain < current_price:
+            cands.append((max_pain, "Max pain"))
+        if cands:
+            ref_target, ref_source = max(cands, key=lambda x: x[0])
+        if call_wall_t and call_wall_t > current_price:
+            stop_level, stop_source = call_wall_t, "Call wall"
+        elif em:
+            stop_level, stop_source = em["high"], "EM upper"
+        hold_note = (
+            "Negative GEX amplifies drops — hold while GEX stays negative"
+            if total_gex < 0
+            else "Positive GEX dampens moves — take profits at target, not momentum plays"
+        )
+    else:
+        ref_target  = em["high"] if em else None
+        ref_source  = "EM upper"
+        stop_level  = em["low"]  if em else None
+        stop_source = "EM lower"
+        hold_note   = "Iron condor profits if SPY stays within EM range through expiry"
+
+    # Flag if max pain sits between current price and target (acts as friction)
+    mp_headwind = bool(
+        max_pain and ref_target and (
+            (direction == "Bullish" and current_price < max_pain < ref_target) or
+            (direction == "Bearish" and ref_target < max_pain < current_price)
+        )
+    )
+
+    ref_pct  = round((ref_target - current_price) / current_price * 100, 2) if ref_target  else None
+    stop_pct = round((stop_level - current_price) / current_price * 100, 2) if stop_level  else None
+
     return {
         "strategy":    strategy,
         "strat_color": strat_color,
@@ -437,10 +539,22 @@ def compute_strategy_suggestion(
         "conf_color":  conf_color,
         "vol_bias":    vol_bias,
         "vb_color":    vb_color,
-        "strike_label": strike_label,
-        "em_low":       em["low"]  if em else None,
-        "em_high":      em["high"] if em else None,
-        "rationale":    rationale[:4],
+        "strike_label":  strike_label,
+        "em_low":        em["low"]  if em else None,
+        "em_high":       em["high"] if em else None,
+        "rationale":     rationale[:4],
+        # Reference levels
+        "ref_target":    ref_target,
+        "ref_source":    ref_source,
+        "ref_pct":       ref_pct,
+        "stop_level":    stop_level,
+        "stop_source":   stop_source,
+        "stop_pct":      stop_pct,
+        "gap_fill":      gap_fill_level,
+        "gap_fill_pct":  gap_fill_pct,
+        "gap_fill_date": gap_fill_date,
+        "mp_headwind":   mp_headwind,
+        "hold_note":     hold_note,
     }
 
 

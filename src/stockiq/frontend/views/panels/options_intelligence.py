@@ -15,7 +15,7 @@ import pytz
 import pandas as pd
 import streamlit as st
 
-from stockiq.backend.services.spy_service import get_spy_options_analysis, get_vol_regime
+from stockiq.backend.services.spy_service import get_spy_options_analysis, get_vol_regime, get_spy_gaps_df
 from stockiq.backend.models.options import compute_strategy_suggestion
 from stockiq.frontend.views.components.spy_charts import (
     oi_gex_combined_chart,
@@ -48,8 +48,23 @@ def render_options_intelligence(current_price: float) -> None:
     else:
         expander_seed = seed
 
-    vol = get_vol_regime()
-    _render_what_is_expander(expander_seed, current_price, vol, pc=expander_seed.get("pc"))
+    vol     = get_vol_regime()
+    gaps_df = get_spy_gaps_df()
+    expander_suggestion = compute_strategy_suggestion(
+        current_price,
+        expander_seed.get("expected_move"),
+        expander_seed.get("pc"),
+        expander_seed.get("gex_df", pd.DataFrame()),
+        expander_seed.get("oi_df", pd.DataFrame()),
+        expander_seed["max_pain"],
+        vol,
+        gaps_df=gaps_df,
+    )
+    _render_what_is_expander(
+        expander_seed, current_price, vol,
+        pc=expander_seed.get("pc"),
+        suggestion=expander_suggestion,
+    )
 
     expirations = seed["expirations"]
     default_idx = expirations.index(today_iso) if today_iso in expirations else 0
@@ -79,7 +94,7 @@ def render_options_intelligence(current_price: float) -> None:
     mp_color, mp_signal = _max_pain_style(dist_pct)
     dist_arrow = "▲" if dist_pct >= 0 else "▼"
 
-    suggestion = compute_strategy_suggestion(current_price, em, pc, gex_df, oi_df, max_pain, vol)
+    suggestion = compute_strategy_suggestion(current_price, em, pc, gex_df, oi_df, max_pain, vol, gaps_df=gaps_df)
     with strat_col:
         _render_strategy_card(suggestion, selected_label)
 
@@ -530,10 +545,90 @@ def _render_gex_summary_card(gex_df: pd.DataFrame) -> None:
     )
 
 
+# ── Expander live-text helpers ────────────────────────────────────────────────
+
+def _expander_signal_block(suggestion: dict | None, lbl: str) -> str:
+    """Returns a markdown string with live direction-vote rationale."""
+    if not suggestion:
+        return ""
+    direction  = suggestion["direction"]
+    confidence = suggestion["confidence"]
+    rationale  = suggestion.get("rationale", [])
+    bullets    = "\n".join(f"> ◆ {r}" for r in rationale) if rationale else ""
+    dir_emoji  = "🟢" if direction == "Bullish" else "🔴" if direction == "Bearish" else "🟡"
+    return (
+        f"\n> *Right now ({lbl}):*\n"
+        f"{bullets}\n"
+        f"> → {dir_emoji} **{direction}** direction · **{confidence}** confidence\n"
+    )
+
+
+def _expander_vol_block(suggestion: dict | None, vol: dict | None) -> str:
+    """Returns a markdown string showing the IV Rank → strategy decision chain."""
+    if not vol:
+        return ""
+    rank  = vol["iv_rank"]
+    bias  = vol["strategy_bias"]
+    color_lbl = "High IV" if rank >= 50 else "Mid IV" if rank >= 30 else "Low IV"
+    if not suggestion:
+        return f"> *Right now: IV Rank **{rank:.0f}%** ({color_lbl}) → **{bias}***\n"
+    direction = suggestion["direction"]
+    strategy  = suggestion["strategy"]
+    hv30      = vol.get("hv30")
+    ratio     = vol.get("iv_hv_ratio")
+    ratio_str = f" · IV/HV **{ratio:.2f}×**" if ratio else ""
+    hv_str    = f" · HV30 **{hv30:.1f}%**" if hv30 else ""
+    return (
+        f"> *Right now: IV Rank **{rank:.0f}%** ({color_lbl}){hv_str}{ratio_str} → **{bias}***\n"
+        f"> Combined with **{direction}** direction → suggested strategy: **{strategy}**\n"
+    )
+
+
+def _expander_levels_block(suggestion: dict | None) -> str:
+    """Returns a markdown string with the live reference target, stop, and hold note."""
+    if not suggestion:
+        return ""
+    ref     = suggestion.get("ref_target")
+    ref_src = suggestion.get("ref_source", "")
+    ref_pct = suggestion.get("ref_pct")
+    stop    = suggestion.get("stop_level")
+    stp_src = suggestion.get("stop_source", "")
+    stp_pct = suggestion.get("stop_pct")
+    gap     = suggestion.get("gap_fill")
+    gap_pct = suggestion.get("gap_fill_pct")
+    gap_dt  = suggestion.get("gap_fill_date", "")
+    hold    = suggestion.get("hold_note", "")
+    mp_warn = suggestion.get("mp_headwind", False)
+
+    def _fmt(price, pct, src):
+        if price is None:
+            return "N/A"
+        sign = "+" if (pct or 0) >= 0 else ""
+        return f"**${price:,.2f}** ({sign}{pct:.1f}% · {src})" if pct is not None else f"**${price:,.2f}** ({src})"
+
+    lines = ["> *Right now:*"]
+    lines.append(f"> · Target: {_fmt(ref, ref_pct, ref_src)}")
+    lines.append(f"> · Stop: {_fmt(stop, stp_pct, stp_src)}")
+    if gap is not None and (ref is None or abs(gap - ref) > 0.50):
+        gap_label = f"Gap fill{' · ' + gap_dt if gap_dt else ''}"
+        lines.append(f"> · Nearest gap fill: {_fmt(gap, gap_pct, gap_label)}")
+    if mp_warn:
+        lines.append("> · ⚠ Max pain sits between current price and target — may slow progress")
+    if hold:
+        lines.append(f"> · Hold: {hold}")
+    return "\n".join(lines) + "\n"
+
+
 # ── "What is?" expander ────────────────────────────────────────────────────────
 
-def _render_what_is_expander(seed: dict, current_price: float, vol: dict | None = None, pc: dict | None = None) -> None:
-    """Educational expander using live data from the seed (nearest expiration)."""
+def _render_what_is_expander(
+    seed: dict,
+    current_price: float,
+    vol: dict | None = None,
+    pc: dict | None = None,
+    suggestion: dict | None = None,
+) -> None:
+    """Educational expander using live data from the seed (nearest/0DTE expiration)."""
     oi_df  = seed.get("oi_df", pd.DataFrame())
     gex_df = seed.get("gex_df", pd.DataFrame())
     em     = seed.get("expected_move")
@@ -683,22 +778,54 @@ Before choosing a strategy, check whether options are currently cheap or expensi
 - **IV/HV Ratio < 0.9** → options cheap → favour buying premium (debit spreads, long straddles).
 > *Right now: {vol_txt}*
 
-**This Week's Setup — Strategy Suggester**
-Synthesises four direction signals (P/C ratio, max pain gravity, GEX regime, OI wall proximity)
-with the volatility regime to recommend a strategy type and approximate strike levels.
+**Setup Card — How the Strategy Is Chosen**
 
-| Direction | Vol Bias | Suggested Strategy |
-|---|---|---|
-| Neutral | Sell Premium | Iron Condor |
-| Neutral | Buy Premium | Long Straddle |
-| Bullish | Sell Premium | Bull Put Spread |
-| Bullish | Buy Premium | Bull Call Spread |
-| Bearish | Sell Premium | Bear Call Spread |
-| Bearish | Buy Premium | Bear Put Spread |
+The setup card synthesises three steps: direction vote → volatility regime → reference levels.
 
-Strike hints are set at 30% and 60% of the expected move from spot.
-Confidence is HIGH when 3+ signals agree, MODERATE for 2, LOW when split.
-*Not financial advice — use as a starting framework, not a trade order.*
+---
+
+**Step 1 · Direction Vote (4 signals, majority wins)**
+
+| Signal | Bullish when | Bearish when | Neutral when |
+|---|---|---|---|
+| **P/C Ratio** | P/C < 0.80 — calls dominate | P/C > 1.20 — puts dominate | 0.80 – 1.20 |
+| **Max Pain** | Max pain > 0.5% above spot | Max pain > 0.5% below spot | Within ±0.5% |
+| **GEX Regime** | Positive total GEX (dealers stabilise) | Negative near-ATM GEX (dealers amplify) | Negative but not near-ATM |
+| **OI Walls** | Put wall < 1.5% below (floor) | Call wall < 1.5% above (ceiling) | Both walls far away |
+
+Confidence: **HIGH** = 3+ signals agree · **MODERATE** = 2 agree · **LOW** = split vote.
+{_expander_signal_block(suggestion, lbl_display)}
+
+---
+
+**Step 2 · IV Rank decides Buy vs Sell premium**
+
+IV Rank (0–100%) shows where today's VIX sits relative to its 52-week range.
+High IV Rank → options are *historically expensive* → better to sell premium and collect the inflated price.
+Low IV Rank → options are *historically cheap* → better to buy premium before vol expands.
+
+| IV Rank | Options pricing | Strategy bias | Examples |
+|---|---|---|---|
+| ≥ 50% | Expensive vs history | **Sell premium** | Bull Put Spread, Bear Call Spread, Iron Condor |
+| 30–50% | Mixed / neutral | **Neutral** — reduce size, wait for cleaner setup | All types, smaller position |
+| < 30% | Cheap vs history | **Buy premium** | Bull Call Spread, Bear Put Spread, Long Straddle |
+
+> *IV/HV Ratio > 1.1 also triggers Sell Premium — options pricing more vol than SPY is actually delivering.*
+
+{_expander_vol_block(suggestion, vol)}
+
+---
+
+**Step 3 · Reference Levels (price magnets, not guaranteed exits)**
+
+- **Target**: the nearest meaningful level in the trade direction. Priority order: unfilled gap fill → OI wall → expected move boundary → max pain. When two levels cluster together it's a stronger signal.
+- **Unfilled gap fills**: when SPY gaps up or down and never revisits the open edge of that gap, the level becomes a price magnet — the market tends to return to fill it. A gap fill target near an OI wall is especially strong.
+- **Stop / Invalidation**: the level that disproves the trade thesis. If price crosses it, the logic behind the trade is no longer valid. Set from the opposing OI wall or the EM boundary.
+- **Hold condition**: if GEX is positive (dealers long gamma), small dips get absorbed — stay patient. If GEX is negative (short gamma), moves can run fast and reverse hard — exit near the target rather than holding for more.
+
+{_expander_levels_block(suggestion)}
+
+---
 
 **Flow Sweeps — Volume / OI Spike Detector**
 Flags OTM strikes where today's volume is ≥ 3× the existing open interest.
@@ -708,6 +835,8 @@ of an institutional sweep — rather than closing or rolling existing contracts.
 - **PUT sweeps**: bearish positioning or large protective buying.
 - Ratio colour: Yellow = 10×+ · Purple = 5–10× · Grey = 3–5×.
 Data is sourced from Yahoo Finance (15-min delay). Sweeps update with the expiration selector.
+
+*Not financial advice — all levels are reference points, not trade orders.*
             """
         )
 
@@ -751,6 +880,74 @@ def _render_strategy_card(suggestion: dict | None, exp_label: str = "") -> None:
         for r in suggestion["rationale"]
     )
 
+    # ── Reference levels rendering helpers ───────────────────────────────────
+    ref_target  = suggestion.get("ref_target")
+    ref_source  = suggestion.get("ref_source", "—")
+    ref_pct     = suggestion.get("ref_pct")
+    stop_level  = suggestion.get("stop_level")
+    stop_source = suggestion.get("stop_source", "—")
+    stop_pct    = suggestion.get("stop_pct")
+    gap_fill    = suggestion.get("gap_fill")
+    gap_fill_pct  = suggestion.get("gap_fill_pct")
+    gap_fill_date = suggestion.get("gap_fill_date")
+    mp_headwind = suggestion.get("mp_headwind", False)
+    hold_note   = suggestion.get("hold_note", "")
+    direction   = suggestion["direction"]
+
+    tgt_clr  = "#22C55E" if direction == "Bullish" else "#EF4444" if direction == "Bearish" else "#A78BFA"
+    stop_clr = "#EF4444" if direction == "Bullish" else "#22C55E" if direction == "Bearish" else "#F59E0B"
+
+    def _level_html(price: float | None, pct: float | None, source: str, color: str, extra: str = "") -> str:
+        if price is None:
+            return f'<span style="font-size:0.82rem;font-weight:700;color:#475569">—</span>'
+        sign  = "+" if (pct or 0) >= 0 else ""
+        pct_s = f"{sign}{pct:.1f}%" if pct is not None else ""
+        ex    = f" · {extra}" if extra else ""
+        return (
+            f'<span style="font-size:0.85rem;font-weight:700;color:{color}">${price:,.2f}</span>'
+            f'<span style="font-size:0.7rem;color:#64748B;margin-left:4px">{pct_s} · {source}{ex}</span>'
+        )
+
+    ref_html  = _level_html(ref_target,  ref_pct,       ref_source,  tgt_clr)
+    stop_html = _level_html(stop_level,  stop_pct,      stop_source, stop_clr)
+    # Show gap fill row only if it differs from the primary reference target
+    show_gap  = (gap_fill is not None
+                 and (ref_target is None or abs(gap_fill - ref_target) > 0.50))
+    gap_html  = (_level_html(gap_fill, gap_fill_pct, "Gap fill", "#F59E0B", gap_fill_date or "")
+                 if show_gap else "")
+
+    mp_warn = (
+        f'<div style="font-size:0.72rem;color:#F59E0B;margin-top:5px">'
+        f'⚠ Max pain may act as friction before target</div>'
+        if mp_headwind else ""
+    )
+    hold_html = (
+        f'<div style="font-size:0.72rem;color:#94A3B8;margin-top:5px">⟳ {hold_note}</div>'
+        if hold_note else ""
+    )
+    gap_row = (
+        f'<div style="margin-top:6px">'
+        f'<span style="font-size:9px;color:#64748B;text-transform:uppercase;letter-spacing:.06em">Gap Fill &nbsp;</span>'
+        f'{gap_html}</div>'
+        if show_gap else ""
+    )
+
+    ref_levels_html = (
+        f'<div style="margin-top:12px;padding-top:10px;border-top:1px solid #1E293B">'
+        f'<div style="font-size:9px;color:#64748B;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">'
+        f'Reference Levels</div>'
+        f'<div style="display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start">'
+        f'<div><div style="font-size:9px;color:#64748B;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Target</div>'
+        f'<div>{ref_html}</div></div>'
+        f'<div><div style="font-size:9px;color:#64748B;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Stop / Invalidation</div>'
+        f'<div>{stop_html}</div></div>'
+        f'</div>'
+        f'{gap_row}'
+        f'{mp_warn}'
+        f'{hold_html}'
+        f'</div>'
+    )
+
     c_main, c_why = st.columns([3, 2])
     with c_main:
         st.markdown(
@@ -783,8 +980,9 @@ def _render_strategy_card(suggestion: dict | None, exp_label: str = "") -> None:
             f'letter-spacing:.06em;margin-bottom:2px">EM Range</div>'
             f'<div style="font-size:0.82rem;font-weight:700;color:#A78BFA">{em_range}</div></div>'
             f'</div>'
+            f'{ref_levels_html}'
             f'<div style="font-size:9px;color:#475569;margin-top:10px">'
-            f'Not financial advice · Strike hints ≈ 30%/60% of expected move</div>'
+            f'Not financial advice · Strike hints ≈ 30%/60% of expected move · Reference levels are price magnets, not guaranteed exits</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
