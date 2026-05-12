@@ -212,21 +212,22 @@ def render_spy_summary_card(
             clr  = _UP if diff >= 0 else _DN
             tech_rows.append((label, f"${val:,.2f}", f"{diff:+.2f}% vs price", clr))
 
-    left, right = st.columns(2, gap="large")
-    with left:
-        st.markdown(
+    def _section(header: str, rows: list) -> str:
+        return (
+            f'<div style="flex:1;min-width:220px">'
             f'<div style="font-size:0.72rem;color:{_MUT};text-transform:uppercase;'
-            f'letter-spacing:.08em;margin-bottom:6px">Price</div>',
-            unsafe_allow_html=True,
+            f'letter-spacing:.08em;margin-bottom:6px">{header}</div>'
+            f'{_kv_table(rows)}'
+            f'</div>'
         )
-        st.markdown(_kv_table(price_rows), unsafe_allow_html=True)
-    with right:
-        st.markdown(
-            f'<div style="font-size:0.72rem;color:{_MUT};text-transform:uppercase;'
-            f'letter-spacing:.08em;margin-bottom:6px">Technicals</div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown(_kv_table(tech_rows), unsafe_allow_html=True)
+
+    st.markdown(
+        f'<div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">'
+        f'{_section("Price", price_rows)}'
+        f'{_section("Technicals", tech_rows)}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _kv_table(rows: list[tuple]) -> str:
@@ -241,7 +242,7 @@ def _kv_table(rows: list[tuple]) -> str:
         )
         html += (
             f'<div style="{bg}display:flex;align-items:center;gap:10px;'
-            f'padding:5px 8px;border-bottom:1px solid {_SEP}">'
+            f'padding:2px 8px;border-bottom:1px solid {_SEP}">'
             f'<span style="color:{_MUT};font-size:0.82rem;width:82px;flex-shrink:0">{label}</span>'
             f'<span style="font-size:0.85rem;font-weight:600;color:{val_clr}">{value}{sub_html}</span>'
             f'</div>'

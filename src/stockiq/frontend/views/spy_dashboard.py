@@ -55,7 +55,7 @@ def render_spy_dashboard_tab() -> None:
     )
     active_tab = st.session_state[_TAB_KEY]
 
-    @st.fragment(run_every="90s")
+    @st.fragment(run_every="60s")
     def _live_section() -> None:
         # Fire all independent fetches in parallel — they share no dependencies.
         with ThreadPoolExecutor(max_workers=5) as pool:
