@@ -157,7 +157,7 @@ def render_options_intelligence(current_price: float) -> None:
             st.plotly_chart(
                 oi_gex_combined_chart(
                     oi_df, chart_gex_df, current_price, max_pain,
-                    n_strikes=30 if per_exp else 120,
+                    n_strikes=30 if per_exp else 60,
                     call_gex_df=chart_call_gex,
                     put_gex_df=chart_put_gex,
                 ),
