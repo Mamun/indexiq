@@ -264,22 +264,36 @@ def get_spy_options_analysis(
     raw_puts  = _yahoo_chain_for_bid_ask(data["expiration"], "puts")
     sweep_df  = compute_sweep_signals(raw_calls, raw_puts, current_price or max_pain)
 
-    # GEX requires IV — CBOE returns iv=0 for short-dated expirations, and both
-    # CBOE and Yahoo return iv=0 after market hours (no bid/ask to compute from).
+    # GEX requires IV — CBOE returns iv=0 for short-dated expirations (0DTE/1DTE),
+    # and both CBOE and Yahoo return iv=0 after market hours (no bid/ask).
     # Strategy:
-    #   1. Prefer Yahoo data when it covers the exact expiration date (better IV coverage).
-    #   2. Fall back to CBOE data otherwise.
-    #   3. Use VIX/100 as fallback_iv so GEX is still computable when chain IV is 0.
+    #   1. Always use CBOE data for OI (reliable; Yahoo reports oi=0 for 0DTE).
+    #   2. Overlay Yahoo IV by strike when Yahoo has IV > 0 for the same expiration.
+    #   3. VIX/100 fallback fills any remaining iv=0 strikes.
     _ydata = fetch_spy_options_data(expiration=data["expiration"])
-    _use_yahoo = (
+    _yahoo_has_iv = (
         _ydata
         and _ydata.get("expiration") == data["expiration"]
         and not _ydata["calls"].empty
         and "impliedVolatility" in _ydata["calls"].columns
         and (_ydata["calls"]["impliedVolatility"] > 0.001).any()
     )
-    _gex_calls = _ydata["calls"] if _use_yahoo else data["calls"]
-    _gex_puts  = _ydata["puts"]  if _use_yahoo else data["puts"]
+
+    def _merge_iv(cboe_df: pd.DataFrame, yahoo_df: pd.DataFrame) -> pd.DataFrame:
+        """Take CBOE OI + override IV from Yahoo by strike where Yahoo has valid IV."""
+        merged = cboe_df.copy()
+        iv_map = yahoo_df.set_index("strike")["impliedVolatility"]
+        yahoo_iv = merged["strike"].map(iv_map)
+        better = yahoo_iv > 0.001
+        merged.loc[better, "impliedVolatility"] = yahoo_iv[better]
+        return merged
+
+    if _yahoo_has_iv:
+        _gex_calls = _merge_iv(data["calls"], _ydata["calls"])
+        _gex_puts  = _merge_iv(data["puts"],  _ydata["puts"])
+    else:
+        _gex_calls = data["calls"]
+        _gex_puts  = data["puts"]
 
     # VIX-based fallback IV for after-hours when chain IV is universally 0
     try:
