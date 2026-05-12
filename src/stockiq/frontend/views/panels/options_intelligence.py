@@ -17,7 +17,7 @@ import streamlit as st
 
 from stockiq.backend.services.spy_service import get_spy_options_analysis, get_vol_regime, get_spy_gaps_df
 from stockiq.backend.models.options import compute_strategy_suggestion
-from stockiq.frontend.views.components.spy_charts import (
+from stockiq.frontend.views.components.options_charts import (
     oi_gex_combined_chart,
     oi_heatmap_chart,
 )
@@ -524,7 +524,10 @@ def _render_gex_summary_card(gex_df: pd.DataFrame) -> None:
         )
         return
     total_gex = gex_df["gex"].sum()
-    total_b   = total_gex / 1e9
+    total_label = (
+        f"{total_gex / 1e9:+.2f}B" if abs(total_gex) >= 1e9
+        else f"{total_gex / 1e6:+.1f}M"
+    )
     if total_gex >= 0:
         gex_color  = "#22C55E"
         gex_gamma  = "Long Gamma"
@@ -544,7 +547,7 @@ def _render_gex_summary_card(gex_df: pd.DataFrame) -> None:
   <div style="font-size:10px;color:#94A3B8;font-weight:700;letter-spacing:.07em;
               text-transform:uppercase;margin-bottom:4px">Gamma Exposure (GEX)</div>
   <div style="font-size:32px;font-weight:900;color:{gex_color};line-height:1;margin:4px 0">
-    {total_b:+.1f}B
+    {total_label}
   </div>
   <div style="font-size:13px;font-weight:800;color:{gex_color};line-height:1.2">{gex_gamma}</div>
   <div style="font-size:10px;color:#64748B;margin-bottom:6px">{gex_sign}</div>
@@ -858,7 +861,7 @@ Data is sourced from Yahoo Finance (15-min delay). Sweeps update with the expira
 
 # ── Strategy Suggester card ────────────────────────────────────────────────────
 
-def _render_strategy_card(suggestion: dict | None, exp_label: str = "", exp_iso: str = "") -> None:
+def _render_strategy_card(suggestion: dict | None, exp_label: str = "", exp_iso: str = "", show_why: bool = True) -> None:
     if not suggestion:
         return
 
@@ -966,13 +969,7 @@ def _render_strategy_card(suggestion: dict | None, exp_label: str = "", exp_iso:
         f'</div>'
     )
 
-    _sc1, _sc2 = st.columns([12, 1])
-    with _sc2:
-        with st.popover("🔗", use_container_width=True, help="Share this strategy card"):
-            st.code(_share_url("/spy-trade-idea", exp_iso), language=None)
-            st.caption("Copy the link above to share this strategy card.")
-
-    c_main, c_why = st.columns([3, 2])
+    c_main, c_why = st.columns([3, 2]) if show_why else (st.container(), None)
     with c_main:
         st.markdown(
             f'<div style="background:rgba(255,255,255,0.03);border:1px solid #1E293B;'
@@ -980,9 +977,14 @@ def _render_strategy_card(suggestion: dict | None, exp_label: str = "", exp_iso:
             f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
             f'<span style="font-size:11px;font-weight:700;color:#64748B;letter-spacing:.08em;'
             f'text-transform:uppercase">{setup_title}</span>'
+            f'<div style="display:flex;align-items:center;gap:8px">'
+            f'<a href="{_share_url("/spy-trade-idea", exp_iso)}" target="_blank" style="font-size:10px;'
+            f'color:#475569;text-decoration:none;padding:2px 7px;border:1px solid #334155;'
+            f'border-radius:4px;white-space:nowrap">🔗 Share</a>'
             f'<span style="background:{conf_clr}22;color:{conf_clr};font-size:0.68rem;font-weight:700;'
             f'padding:2px 8px;border-radius:4px;letter-spacing:.06em">'
             f'{suggestion["confidence"]} CONFIDENCE</span>'
+            f'</div>'
             f'</div>'
             f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
             f'<span style="font-size:28px;font-weight:900;color:{strat_clr};line-height:1">'
@@ -1010,16 +1012,17 @@ def _render_strategy_card(suggestion: dict | None, exp_label: str = "", exp_iso:
             f'</div>',
             unsafe_allow_html=True,
         )
-    with c_why:
-        st.markdown(
-            f'<div style="background:rgba(255,255,255,0.03);border:1px solid #1E293B;'
-            f'border-radius:10px;padding:16px">'
-            f'<div style="font-size:9px;color:#64748B;text-transform:uppercase;'
-            f'letter-spacing:.06em;margin-bottom:8px">Why this strategy</div>'
-            f'{rationale_html}'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
+    if show_why and c_why is not None:
+        with c_why:
+            st.markdown(
+                f'<div style="background:rgba(255,255,255,0.03);border:1px solid #1E293B;'
+                f'border-radius:10px;padding:16px">'
+                f'<div style="font-size:9px;color:#64748B;text-transform:uppercase;'
+                f'letter-spacing:.06em;margin-bottom:8px">Why this strategy</div>'
+                f'{rationale_html}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
 
 # ── Volatility Regime bar ─────────────────────────────────────────────────────

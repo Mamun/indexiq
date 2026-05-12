@@ -91,12 +91,16 @@ def compute_gex(
     puts: pd.DataFrame,
     current_price: float,
     expiration: str,
+    fallback_iv: float = 0.0,
 ) -> pd.DataFrame:
     """
     Dealer Gamma Exposure (GEX) by strike using Black-Scholes gamma.
     Positive GEX = dealers long gamma (stabilising — they buy dips, sell rips).
     Negative GEX = dealers short gamma (amplifying — moves accelerate).
     Returns DataFrame: strike, gex (in dollars).
+
+    fallback_iv: used for strikes where the chain reports IV=0 (e.g. after market
+    hours when bid/ask are stale). Pass VIX/100 for a reasonable estimate.
     """
     try:
         dte = max((datetime.strptime(expiration, "%Y-%m-%d").date()
@@ -110,6 +114,10 @@ def compute_gex(
         K     = df["strike"].values.astype(float)
         sigma = df["impliedVolatility"].fillna(0).values.astype(float)
         oi    = df["openInterest"].fillna(0).values.astype(float)
+        # Fill zero/missing IV with fallback (VIX-based) so GEX is still computable
+        # after market hours when option chains report IV=0 across all strikes.
+        if fallback_iv > 0.001:
+            sigma = np.where(sigma < 0.001, fallback_iv, sigma)
         valid = (sigma > 0.001) & (oi > 0) & (K > 0)
         if not valid.any():
             return pd.DataFrame(columns=["strike", "gex"])

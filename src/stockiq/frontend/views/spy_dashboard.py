@@ -109,7 +109,7 @@ def render_spy_dashboard_tab() -> None:
                 pdl=intraday["pdl"],
                 prev_close=intraday["prev_close"],
             )
-            st.divider()
+            st.markdown('<hr style="border:none;border-top:1px solid #1E293B;margin:6px 0">', unsafe_allow_html=True)
             render_options_intelligence(quote["price"])
 
     _live_section()

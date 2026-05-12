@@ -256,14 +256,39 @@ def get_spy_options_analysis(
 
     max_pain      = compute_max_pain(data["calls"], data["puts"])
     oi_df         = compute_oi_by_strike(data["calls"], data["puts"], current_price or max_pain)
-    gex_df        = compute_gex(data["calls"], data["puts"], current_price or max_pain, data["expiration"])
     expected_move = compute_expected_move(data["calls"], data["puts"], current_price or max_pain, data["expiration"])
     pc            = compute_put_call_ratio(data["calls"], data["puts"], data["expiration"])
 
-    # Yahoo chain carries volume data; use it for sweeps and bid/ask
+    # Yahoo chain carries volume, bid/ask, and reliable IV (CBOE iv=0 for short-dated expirations)
     raw_calls = _yahoo_chain_for_bid_ask(data["expiration"], "calls")
     raw_puts  = _yahoo_chain_for_bid_ask(data["expiration"], "puts")
     sweep_df  = compute_sweep_signals(raw_calls, raw_puts, current_price or max_pain)
+
+    # GEX requires IV — CBOE returns iv=0 for short-dated expirations, and both
+    # CBOE and Yahoo return iv=0 after market hours (no bid/ask to compute from).
+    # Strategy:
+    #   1. Prefer Yahoo data when it covers the exact expiration date (better IV coverage).
+    #   2. Fall back to CBOE data otherwise.
+    #   3. Use VIX/100 as fallback_iv so GEX is still computable when chain IV is 0.
+    _ydata = fetch_spy_options_data(expiration=data["expiration"])
+    _use_yahoo = (
+        _ydata
+        and _ydata.get("expiration") == data["expiration"]
+        and not _ydata["calls"].empty
+        and "impliedVolatility" in _ydata["calls"].columns
+        and (_ydata["calls"]["impliedVolatility"] > 0.001).any()
+    )
+    _gex_calls = _ydata["calls"] if _use_yahoo else data["calls"]
+    _gex_puts  = _ydata["puts"]  if _use_yahoo else data["puts"]
+
+    # VIX-based fallback IV for after-hours when chain IV is universally 0
+    try:
+        _vix_df = fetch_vix_ohlc(period="5d")
+        _fallback_iv = float(_vix_df["Close"].iloc[-1]) / 100 if not _vix_df.empty else 0.20
+    except Exception:
+        _fallback_iv = 0.20
+
+    gex_df = compute_gex(_gex_calls, _gex_puts, current_price or max_pain, data["expiration"], fallback_iv=_fallback_iv)
 
     return {
         "max_pain":      max_pain,

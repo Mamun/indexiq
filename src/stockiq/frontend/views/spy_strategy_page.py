@@ -13,10 +13,7 @@ from stockiq.backend.services.spy_service import (
     get_spy_quote,
     get_vol_regime,
 )
-from stockiq.frontend.views.panels.options_intelligence import (
-    _render_strategy_card,
-    _render_vol_regime_bar,
-)
+from stockiq.frontend.views.panels.options_intelligence import _render_strategy_card
 
 _ET = pytz.timezone("America/New_York")
 
@@ -68,10 +65,7 @@ def render_spy_strategy_page() -> None:
         return
 
     st.divider()
-    _render_strategy_card(suggestion, exp_label, data["expiration"])
-
-    st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
-    _render_vol_regime_bar(vol)
+    _render_strategy_card(suggestion, exp_label, data["expiration"], show_why=False)
 
     fetched_at = _datetime.now(tz=_ET).strftime("%-I:%M %p ET · %b %-d")
     st.caption(
