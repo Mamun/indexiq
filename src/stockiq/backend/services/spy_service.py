@@ -20,7 +20,7 @@ from stockiq.backend.data.yf_fetch import fetch_ohlcv
 from stockiq.backend.models.indicators import classify_gap_types, compute_daily_gaps, compute_rsi, patch_today_gap
 from stockiq.backend.models.options import (
     compute_max_pain, compute_oi_by_strike, label_expirations,
-    compute_gex, compute_gex_components, compute_expected_move, compute_sweep_signals, compute_vol_regime,
+    compute_gex_split, compute_gex_components, compute_expected_move, compute_sweep_signals, compute_vol_regime,
     compute_put_call_ratio,
 )
 
@@ -311,13 +311,19 @@ def get_spy_options_analysis(
     except Exception:
         _fallback_iv = 0.20
 
-    gex_df         = compute_gex(_gex_calls, _gex_puts, current_price or max_pain, data["expiration"], fallback_iv=_fallback_iv)
-    gex_components = compute_gex_components(_gex_calls, _gex_puts, current_price or max_pain, data["expiration"], fallback_iv=_fallback_iv)
+    _call_gex_df, _put_gex_df, gex_df = compute_gex_split(
+        _gex_calls, _gex_puts, current_price or max_pain, data["expiration"], fallback_iv=_fallback_iv
+    )
+    gex_components = compute_gex_components(
+        _gex_calls, _gex_puts, current_price or max_pain, data["expiration"], fallback_iv=_fallback_iv
+    )
 
     return {
         "max_pain":       max_pain,
         "oi_df":          oi_df,
         "gex_df":         gex_df,
+        "call_gex_df":    _call_gex_df,
+        "put_gex_df":     _put_gex_df,
         "gex_components": gex_components,
         "expected_move": expected_move,
         "pc":            pc,
@@ -334,38 +340,52 @@ def get_spy_aggregated_gex(
     expirations: list[str],
     current_price: float,
     max_exp: int = 6,
-) -> pd.DataFrame:
-    """Sum GEX across the nearest max_exp expirations by strike.
+) -> dict:
+    """Aggregate GEX across the nearest max_exp expirations by strike.
 
-    Gives the net dealer book exposure — what dealers must hedge across their
-    entire options book, not just one expiration.  Positive GEX = long gamma
-    (stabilising); negative GEX = short gamma (amplifying).
+    Returns {"combined": df, "calls": df, "puts": df} so the chart can render
+    separate call (green) and put (red) bars — matching InsideFinance's layout.
+    Positive GEX = long gamma (stabilising); negative GEX = short gamma (amplifying).
     """
-    def _fetch(exp: str) -> pd.DataFrame:
+    def _fetch(exp: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         try:
             d = get_spy_options_analysis(expiration=exp, current_price=current_price)
-            return d.get("gex_df", pd.DataFrame()) if d else pd.DataFrame()
+            if not d:
+                return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+            return (
+                d.get("call_gex_df", pd.DataFrame()),
+                d.get("put_gex_df",  pd.DataFrame()),
+                d.get("gex_df",      pd.DataFrame()),
+            )
         except Exception:
-            return pd.DataFrame()
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-    frames: list[pd.DataFrame] = []
+    call_frames: list[pd.DataFrame] = []
+    put_frames:  list[pd.DataFrame] = []
+    comb_frames: list[pd.DataFrame] = []
     with ThreadPoolExecutor(max_workers=4) as pool:
-        for gdf in pool.map(_fetch, expirations[:max_exp]):
+        for cdf, pdf, gdf in pool.map(_fetch, expirations[:max_exp]):
+            if cdf is not None and not cdf.empty:
+                call_frames.append(cdf)
+            if pdf is not None and not pdf.empty:
+                put_frames.append(pdf)
             if gdf is not None and not gdf.empty:
-                frames.append(gdf)
+                comb_frames.append(gdf)
 
-    if not frames:
-        return pd.DataFrame()
+    def _agg(frames: list[pd.DataFrame]) -> pd.DataFrame:
+        if not frames:
+            return pd.DataFrame()
+        # Bucket to $5 so $1-increment 0DTE CBOE chains don't create 60 thin bars.
+        raw = pd.concat(frames).groupby("strike", as_index=False)["gex"].sum()
+        raw["strike"] = (raw["strike"] / 5).round() * 5
+        return (
+            raw.groupby("strike", as_index=False)["gex"].sum()
+            .sort_values("strike")
+            .reset_index(drop=True)
+        )
 
-    raw = (
-        pd.concat(frames)
-        .groupby("strike", as_index=False)["gex"].sum()
-    )
-    # Bucket to $5 strike increments so $1-increment 0DTE chains don't create
-    # 60 thin bars in the chart (CBOE near-term chains use $1 increments).
-    raw["strike"] = (raw["strike"] / 5).round() * 5
-    return (
-        raw.groupby("strike", as_index=False)["gex"].sum()
-        .sort_values("strike")
-        .reset_index(drop=True)
-    )
+    return {
+        "combined": _agg(comb_frames),
+        "calls":    _agg(call_frames),
+        "puts":     _agg(put_frames),
+    }

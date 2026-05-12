@@ -136,6 +136,51 @@ def compute_gex(
     return combined
 
 
+def compute_gex_split(
+    calls: pd.DataFrame,
+    puts: pd.DataFrame,
+    current_price: float,
+    expiration: str,
+    fallback_iv: float = 0.0,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Like compute_gex but returns (call_gex_df, put_gex_df, combined_df).
+
+    Enables InsideFinance-style split chart: call GEX as green bars above zero
+    and put GEX as red bars below zero at each strike, rather than a single
+    net bar that hides put gamma whenever calls dominate.
+    """
+    try:
+        dte = max((datetime.strptime(expiration, "%Y-%m-%d").date()
+                   - datetime.today().date()).days, 0)
+    except Exception:
+        dte = 7
+    T = max(dte, 1) / 365.0
+    r = 0.045
+
+    def _series(df: pd.DataFrame, sign: float) -> pd.DataFrame:
+        K     = df["strike"].values.astype(float)
+        sigma = df["impliedVolatility"].fillna(0).values.astype(float)
+        oi    = df["openInterest"].fillna(0).values.astype(float)
+        if fallback_iv > 0.001:
+            sigma = np.where(sigma < 0.001, fallback_iv, sigma)
+        valid = (sigma > 0.001) & (oi > 0) & (K > 0)
+        if not valid.any():
+            return pd.DataFrame(columns=["strike", "gex"])
+        K, sigma, oi = K[valid], sigma[valid], oi[valid]
+        d1    = (np.log(current_price / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+        gamma = np.exp(-0.5 * d1**2) / (np.sqrt(2 * np.pi) * current_price * sigma * np.sqrt(T))
+        return pd.DataFrame({"strike": K, "gex": sign * gamma * oi * 100 * current_price})
+
+    def _agg(df: pd.DataFrame) -> pd.DataFrame:
+        return df.groupby("strike", as_index=False)["gex"].sum().sort_values("strike").reset_index(drop=True)
+
+    call_df  = _agg(_series(calls, +1))
+    put_df   = _agg(_series(puts,  -1))
+    combined = _agg(pd.concat([call_df, put_df]))
+    return call_df, put_df, combined
+
+
 def compute_gex_components(
     calls: pd.DataFrame,
     puts: pd.DataFrame,

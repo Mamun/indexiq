@@ -72,6 +72,8 @@ def oi_gex_combined_chart(
     current_price: float,
     max_pain: float,
     n_strikes: int = 30,
+    call_gex_df: pd.DataFrame | None = None,
+    put_gex_df: pd.DataFrame | None = None,
 ) -> go.Figure:
     """OI butterfly (left) + GEX (right) sharing a single strike Y-axis.
 
@@ -87,10 +89,8 @@ def oi_gex_combined_chart(
             (gex_df["strike"] <= current_price + dollar_half)
         ].copy()
 
-    # Bucket both datasets to $5 strike increments so OI (CBOE $1 increments)
+    # Bucket all datasets to $5 strike increments so OI (CBOE $1 increments)
     # and GEX render at the same bar height on the shared Y axis.
-    # Without bucketing, GEX bars span $5 while OI bars span $1 — GEX looks 5×
-    # taller on the shared axis.
     bucket = 5.0
     if not gex_df.empty:
         gex_df["strike"] = (gex_df["strike"] / bucket).round() * bucket
@@ -103,6 +103,19 @@ def oi_gex_combined_chart(
             .agg({"call_oi": "sum", "put_oi": "sum"})
             .reset_index(drop=True)
         )
+
+    def _clip_bucket(df: pd.DataFrame | None) -> pd.DataFrame:
+        if df is None or df.empty:
+            return pd.DataFrame(columns=["strike", "gex"])
+        df = df[(df["strike"] >= current_price - dollar_half) &
+                (df["strike"] <= current_price + dollar_half)].copy()
+        df["strike"] = (df["strike"] / bucket).round() * bucket
+        return df.groupby("strike", as_index=False)["gex"].sum()
+
+    use_split = call_gex_df is not None and not call_gex_df.empty
+    if use_split:
+        call_gex_df = _clip_bucket(call_gex_df)
+        put_gex_df  = _clip_bucket(put_gex_df)
 
     # Y range: GEX window drives the range; OI bars fill where they have data.
     active_strikes: list[float] = []
@@ -162,7 +175,32 @@ def oi_gex_combined_chart(
         )
 
     # ── GEX (right panel) ────────────────────────────────────────────────────
-    if not gex_df.empty:
+    _gex_rendered = False
+    if use_split:
+        if not call_gex_df.empty:
+            fig.add_trace(go.Bar(
+                x=call_gex_df["gex"] / 1e6,
+                y=call_gex_df["strike"],
+                orientation="h",
+                marker_color="rgba(34,197,94,0.80)",
+                name="Call GEX",
+                showlegend=True,
+                hovertemplate="Strike: <b>$%{y:,.0f}</b><br>Call GEX: <b>+%{x:,.1f}M</b><extra></extra>",
+            ), row=1, col=2)
+            _gex_rendered = True
+        if not put_gex_df.empty:
+            fig.add_trace(go.Bar(
+                x=put_gex_df["gex"] / 1e6,
+                y=put_gex_df["strike"],
+                orientation="h",
+                marker_color="rgba(239,68,68,0.80)",
+                name="Put GEX",
+                showlegend=True,
+                hovertemplate="Strike: <b>$%{y:,.0f}</b><br>Put GEX: <b>%{x:,.1f}M</b><extra></extra>",
+            ), row=1, col=2)
+            _gex_rendered = True
+    elif not gex_df.empty:
+        # Fallback: net GEX bars (green=stabilising, red=amplifying)
         gex_colors = ["#22C55E" if v >= 0 else "#EF4444" for v in gex_df["gex"]]
         fig.add_trace(go.Bar(
             x=gex_df["gex"] / 1e6,
@@ -170,12 +208,18 @@ def oi_gex_combined_chart(
             orientation="h",
             marker_color=gex_colors,
             opacity=0.8,
-            name="GEX",
+            name="Net GEX",
             showlegend=False,
             hovertemplate="Strike: <b>$%{y:,.0f}</b><br>GEX: <b>%{x:,.1f}M</b><extra></extra>",
         ), row=1, col=2)
+        _gex_rendered = True
+    if _gex_rendered:
         fig.add_vline(x=0, line_color="#475569", line_width=1, row=1, col=2)
-        fig.update_xaxes(title_text="← Amplifying  ·  GEX ($M)  ·  Stabilising →", gridcolor="#1E293B", row=1, col=2)
+        gex_axis_title = (
+            "← Put GEX  ·  GEX ($M)  ·  Call GEX →" if use_split
+            else "← Amplifying  ·  GEX ($M)  ·  Stabilising →"
+        )
+        fig.update_xaxes(title_text=gex_axis_title, gridcolor="#1E293B", row=1, col=2)
 
     # ── Shared reference lines (span both panels via shared Y) ───────────────
     fig.add_hline(
@@ -198,8 +242,9 @@ def oi_gex_combined_chart(
         template="plotly_dark",
         height=460,
         barmode="overlay",
-        showlegend=False,
-        margin=dict(l=60, r=10, t=36, b=50),
+        showlegend=use_split,
+        legend=dict(orientation="h", y=-0.12, x=0.62, font=dict(size=11)) if use_split else {},
+        margin=dict(l=60, r=10, t=36, b=50 if not use_split else 70),
         hovermode="y unified",
     )
     return fig
