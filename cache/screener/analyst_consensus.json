@@ -1043,7 +1043,7 @@
     "targetLowPrice": 110.0
   },
   "ZBRA": {
-    "recommendationMean": 1.77778,
+    "recommendationMean": null,
     "numberOfAnalystOpinions": 16,
     "targetMeanPrice": 325.31375,
     "targetHighPrice": 400.0,
@@ -1204,11 +1204,11 @@
     "targetLowPrice": 19.0
   },
   "SPG": {
-    "recommendationMean": null,
+    "recommendationMean": 2.19048,
     "numberOfAnalystOpinions": 20,
-    "targetMeanPrice": 208.55,
+    "targetMeanPrice": 209.45,
     "targetHighPrice": 250.0,
-    "targetLowPrice": 185.0
+    "targetLowPrice": 189.0
   },
   "AMT": {
     "recommendationMean": 1.76,
