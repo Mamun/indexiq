@@ -1744,8 +1744,8 @@
   },
   "RL": {
     "recommendationMean": 1.57895,
-    "numberOfAnalystOpinions": 16,
-    "targetMeanPrice": 414.2,
+    "numberOfAnalystOpinions": 15,
+    "targetMeanPrice": 412.81332,
     "targetHighPrice": 480.0,
     "targetLowPrice": 219.0
   },
