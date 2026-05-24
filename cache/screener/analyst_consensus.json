@@ -2030,7 +2030,7 @@
     "targetLowPrice": 44.0
   },
   "WBD": {
-    "recommendationMean": 3.15,
+    "recommendationMean": null,
     "numberOfAnalystOpinions": 12,
     "targetMeanPrice": 29.64583,
     "targetHighPrice": 31.25,
