@@ -16,7 +16,7 @@
   "NVDA": {
     "recommendationMean": 1.29032,
     "numberOfAnalystOpinions": 58,
-    "targetMeanPrice": 294.22415,
+    "targetMeanPrice": 295.34482,
     "targetHighPrice": 500.0,
     "targetLowPrice": 180.0
   },
@@ -107,7 +107,7 @@
   "HD": {
     "recommendationMean": 1.88889,
     "numberOfAnalystOpinions": 33,
-    "targetMeanPrice": 372.0606,
+    "targetMeanPrice": 370.21213,
     "targetHighPrice": 430.0,
     "targetLowPrice": 310.0
   },
@@ -455,17 +455,17 @@
     "targetLowPrice": 291.0
   },
   "ETN": {
-    "recommendationMean": 1.73333,
-    "numberOfAnalystOpinions": 28,
-    "targetMeanPrice": 450.59964,
+    "recommendationMean": 1.72414,
+    "numberOfAnalystOpinions": 27,
+    "targetMeanPrice": 450.80704,
     "targetHighPrice": 515.0,
     "targetLowPrice": 321.0
   },
   "DE": {
     "recommendationMean": 2.125,
-    "numberOfAnalystOpinions": 23,
-    "targetMeanPrice": 649.2952,
-    "targetHighPrice": 775.0,
+    "numberOfAnalystOpinions": 22,
+    "targetMeanPrice": 643.89954,
+    "targetHighPrice": 759.0,
     "targetLowPrice": 500.0
   },
   "BKNG": {
@@ -653,7 +653,7 @@
   "PANW": {
     "recommendationMean": 1.59259,
     "numberOfAnalystOpinions": 49,
-    "targetMeanPrice": 224.65388,
+    "targetMeanPrice": 225.7151,
     "targetHighPrice": 285.0,
     "targetLowPrice": 114.0
   },
@@ -688,7 +688,7 @@
   "MRVL": {
     "recommendationMean": 1.5,
     "numberOfAnalystOpinions": 40,
-    "targetMeanPrice": 149.92664,
+    "targetMeanPrice": 151.67664,
     "targetHighPrice": 225.0,
     "targetLowPrice": 85.0
   },
@@ -889,9 +889,9 @@
     "targetLowPrice": 30.0
   },
   "GWW": {
-    "recommendationMean": 2.77778,
-    "numberOfAnalystOpinions": 14,
-    "targetMeanPrice": 1265.5714,
+    "recommendationMean": 2.76471,
+    "numberOfAnalystOpinions": 13,
+    "targetMeanPrice": 1268.6923,
     "targetHighPrice": 1399.0,
     "targetLowPrice": 930.0
   },
@@ -919,7 +919,7 @@
   "TGT": {
     "recommendationMean": 2.55263,
     "numberOfAnalystOpinions": 33,
-    "targetMeanPrice": 131.18182,
+    "targetMeanPrice": 131.45454,
     "targetHighPrice": 160.0,
     "targetLowPrice": 92.0
   },
@@ -1129,7 +1129,7 @@
   "D": {
     "recommendationMean": 2.9375,
     "numberOfAnalystOpinions": 12,
-    "targetMeanPrice": 67.83333,
+    "targetMeanPrice": 67.91667,
     "targetHighPrice": 73.0,
     "targetLowPrice": 64.0
   },
@@ -1157,7 +1157,7 @@
   "ES": {
     "recommendationMean": 2.5625,
     "numberOfAnalystOpinions": 12,
-    "targetMeanPrice": 72.0,
+    "targetMeanPrice": 72.16667,
     "targetHighPrice": 85.0,
     "targetLowPrice": 54.0
   },
@@ -1437,7 +1437,7 @@
   "DDOG": {
     "recommendationMean": 1.41667,
     "numberOfAnalystOpinions": 47,
-    "targetMeanPrice": 223.01941,
+    "targetMeanPrice": 223.9343,
     "targetHighPrice": 320.0,
     "targetLowPrice": 128.85
   },
@@ -1451,8 +1451,8 @@
   "FTNT": {
     "recommendationMean": 2.69767,
     "numberOfAnalystOpinions": 36,
-    "targetMeanPrice": 107.16667,
-    "targetHighPrice": 130.0,
+    "targetMeanPrice": 107.86111,
+    "targetHighPrice": 150.0,
     "targetLowPrice": 70.0
   },
   "ZS": {
@@ -1799,9 +1799,9 @@
     "targetLowPrice": 402.0
   },
   "CARR": {
-    "recommendationMean": 2.0,
-    "numberOfAnalystOpinions": 23,
-    "targetMeanPrice": 75.68609,
+    "recommendationMean": 1.96,
+    "numberOfAnalystOpinions": 22,
+    "targetMeanPrice": 76.08091,
     "targetHighPrice": 90.0,
     "targetLowPrice": 55.0
   },
@@ -1855,9 +1855,9 @@
     "targetLowPrice": 124.0
   },
   "HUBB": {
-    "recommendationMean": 2.13333,
-    "numberOfAnalystOpinions": 13,
-    "targetMeanPrice": 547.1539,
+    "recommendationMean": 2.07143,
+    "numberOfAnalystOpinions": 12,
+    "targetMeanPrice": 548.4167,
     "targetHighPrice": 600.0,
     "targetLowPrice": 479.0
   },
@@ -1983,7 +1983,7 @@
   "AEE": {
     "recommendationMean": 1.88235,
     "numberOfAnalystOpinions": 15,
-    "targetMeanPrice": 119.8,
+    "targetMeanPrice": 119.86667,
     "targetHighPrice": 136.0,
     "targetLowPrice": 105.0
   },
