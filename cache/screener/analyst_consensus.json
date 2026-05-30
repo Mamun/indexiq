@@ -973,7 +973,7 @@
     "targetLowPrice": 144.0
   },
   "STE": {
-    "recommendationMean": 1.875,
+    "recommendationMean": null,
     "numberOfAnalystOpinions": 7,
     "targetMeanPrice": 256.85715,
     "targetHighPrice": 280.0,
@@ -2030,7 +2030,7 @@
     "targetLowPrice": 44.0
   },
   "WBD": {
-    "recommendationMean": null,
+    "recommendationMean": 3.15,
     "numberOfAnalystOpinions": 12,
     "targetMeanPrice": 29.64583,
     "targetHighPrice": 31.25,
